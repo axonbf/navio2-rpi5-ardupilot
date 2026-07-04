@@ -795,3 +795,53 @@ ArduPilot Rover 4.6.3 fully integrated on Pi 5 with Navio2 board subtype. All su
 - Kogger depth sounder on `/dev/ttyUSB0`
 - Clean up Pi 5 home directory (temp files, old build artifacts)
 - Fork/merge ArduPilot patches upstream for Navio2 + Pi 5 compatibility
+
+### Session 13 (2026-07-04) — ArduPilot PRs + RCIO PR review + public repo
+
+- Agent: opencode (kimi-k2.6)
+- Context: Publishing the Pi 5 solution, reviewing PRs for Pi 4 compatibility
+
+#### Work completed
+
+- **RCIO PR review**: Reviewed PR #11 and #12 for Pi 4 compatibility
+  - Found `EXPORT_SYMBOL_GPL(rcio_state)` was accidentally removed by previous model — restored in PR #11
+  - Improved PR #12: `GPIO_CHIP_OFFSET` changed from `#ifdef CONFIG_ARCH_BCM2712` (420) to `-1` (dynamic allocation) — kernel picks free base on any platform
+  - Improved PR #12: CS delays changed from `#ifdef CONFIG_ARCH_BCM2712` to `module_param()` — defaults to 0, Pi 5 passes values via `insmod`
+  - Validated both changes on Pi 5: `alive=1`, GPIO base 625, CS delays 50/50/500us, clean reboot verified
+- **ArduPilot PR restructured**: Split old PR #33645 into two PRs following ArduPilot contribution guidelines:
+  - PR #33647 (Linux bugfixes): PWM_Sysfs retry loop + INS NONE backend. One commit per subsystem.
+  - PR #33648 (Navio2 Pi 5): CRC skip, allow no sensors, pwmchip, native toolchain. One commit per subsystem.
+- **PR #33647 reviewed point by point with user**:
+  - Point 1 (PWM retry loop): approved
+  - Point 2 (INS NONE backend): user requested guard change from `#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 || (AP_INERTIALSENSOR_ALLOW_NO_SENSORS && CONFIG_HAL_BOARD == HAL_BOARD_LINUX)` to `#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 || AP_INERTIALSENSOR_ALLOW_NO_SENSORS` (keep ESP32, add opt-in). Validated on Pi 5 (build + boot test), committed and pushed.
+  - Point 3 (NONE backend simplification): not yet reviewed
+- **Public repo created**: [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) with full setup guide, scripts, overlays, docs
+- **TECHNICAL_ARCHITECTURE.md rewritten** with Mermaid diagrams (system architecture, boot sequence, technical pipeline, component diagram)
+- **TODO.md created** with structured task tracking and PR conflict analysis
+- **Rules added to AGENTS.md**: validation before commit, ask before applying changes to Pi 5
+- **Old PRs closed**: emlid/rcio-dkms#10, ArduPilot/ardupilot#33645
+
+#### Remaining work
+
+- **PR #33648 needs guards** — 6 files have unguarded changes that break Pi 4 / other Linux boards
+- Forum posts: Emlid community + ArduPilot Discourse
+- Repair LiPo power connector (user)
+- Full QGC calibration
+- Clean up Pi 5 home directory
+- ROS2 Jazzy + ArduPilot DDS
+- Hailo-8L + ROS2 inference pipeline
+
+#### Files modified
+
+- `AGENTS.md` — added validation rule, change application rule, updated PR links
+- `docs/TODO.md` — NEW: structured task tracking
+- `docs/TECHNICAL_ARCHITECTURE.md` — rewritten with Mermaid diagrams
+- `docs/TECHNICAL_DESIGN.md` — updated PR strategy, compatibility tables
+- `docs/TECHNICAL_SETUP.md` — updated platform compatibility section
+- `docs/IMPLEMENTATION_PLAN.md` — updated PR links
+- `docs/QUICK_START.md` — updated to reflect dynamic GPIO base + module_param
+- `docs/SESSION_HISTORY.md` — this entry
+- `README.md` — updated PR links
+- `rcio_source/src/rcio_gpio.c` — `GPIO_CHIP_OFFSET = -1` (dynamic allocation)
+- `rcio_source/src/rcio_spi.c` — `module_param()` for CS delays
+- `rcio_source/rcio-pi5-overlay.dts` — NEW: separate Pi 5 overlay

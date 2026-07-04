@@ -87,6 +87,17 @@ sudo ./Build/LED
 2. **No telling the user what they want to hear**: Answer honestly, even if the answer makes you look wrong or incompetent. Do not be condescending, patronizing, obliging, or accommodating.
 3. **If you give a different method than the one you used, say why transparently**: "I used `ps` in my script because X, but suggested `top` to you because Y" — not hiding inconsistency.
 
+## Validation Rule
+
+**Always validate before committing.** Never blindly commit changes. Before every commit:
+1. Build the code on the target hardware (Pi 5) and verify it compiles.
+2. If the change affects runtime behavior, test it (load modules, run ArduPilot, verify sensors).
+3. Only commit after validation passes.
+
+## Change Application Rule
+
+**Always ask before applying changes to the Pi 5.** Do not push files, modify source, or rebuild without explicit user approval.
+
 ## Documentation Rules
 
 When making changes, update docs/ files following the rules in docs/README.md. Maintain cross-consistency between TECHNICAL_ARCHITECTURE.md, IMPLEMENTATION_PLAN.md, and TECHNICAL_SETUP.md.
