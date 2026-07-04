@@ -201,20 +201,36 @@ This is the target architecture for full autonomous marine robotics with AI perc
 
 | File | Change | Pi 4 impact | Safe for both? |
 |---|---|---|---|
-| `boards.py` | `toolchain = 'native'` | Breaks Pi 4 cross-compilation | Needs board config |
+| `boards.py` | `toolchain = 'native'` | Breaks Pi 4 cross-compilation | Pi 4 can override with `--toolchain=arm-linux-gnueabihf` |
 | `AP_Baro_MS5611.cpp` | Skip PROM CRC check | Affects all MS5611 users | Needs navio2 guard |
 | `AP_InertialSensor_config.h` | `ALLOW_NO_SENSORS=1` | Changes behavior for all Linux boards | Needs navio2 guard |
-| `AP_InertialSensor_NONE.h/cpp` | Enable NONE backend for Linux | Safe — opt-in | Yes |
-| `AP_InertialSensor.cpp` | Warn instead of panic | Changes behavior for all Linux boards | Needs navio2 guard |
-| `HAL_Linux_Class.cpp` | RCOutput_Sysfs pwmchip 0→6 | Breaks Pi 4 (uses pwmchip0) | Needs board config |
-| `PWM_Sysfs.cpp` | Retry loop for duty_cycle fd | Safe — retry with timeout | Yes |
+| `AP_InertialSensor_NONE.h/cpp` | Enable NONE backend for Linux | Safe — opt-in | Yes (PR #33647) |
+| `AP_InertialSensor.cpp` | Warn instead of panic | Changes behavior for all Linux boards | Needs navilo2 guard |
+| `HAL_Linux_Class.cpp` | RCOutput_Sysfs pwmchip 0→6 | Breaks Pi 4 (uses pwmchip0) | Needs board config or runtime detection |
+| `PWM_Sysfs.cpp` | Retry loop for duty_cycle fd | Safe — retry with timeout | Yes (PR #33647) |
 | `board/linux.h` | Default MS5611 I2C bus to 1 | May affect other boards | Needs guard |
+
+### ArduPilot PR strategy — two PRs with per-subsystem commits
+
+Following ArduPilot contribution guidelines (one commit per subsystem, `Subsystem: description` format):
+
+**PR #33647 — Linux bugfixes** (safe for all Linux boards):
+- `AP_HAL_Linux: PWM_Sysfs: add retry loop for duty_cycle fd open`
+- `AP_InertialSensor: enable NONE backend for HAL_BOARD_LINUX`
+
+**PR #33648 — Navio2 Pi 5 support** (depends on #33647):
+- `AP_Baro: skip MS5611 PROM CRC check for Navio2`
+- `AP_InertialSensor: allow no sensors and warn instead of panic for Navio2`
+- `AP_HAL_Linux: set MS5611 I2C bus and pwmchip index for Navio2`
+- `Tools: use native toolchain for navio2 board`
 
 ### Steps to publish
 
 1. **RCIO PR #11 (bugfixes)**: [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms
-2. **RCIO PR #12 (Pi 5 support)**: [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — platform-guarded
-3. **ArduPilot PR**: [ArduPilot/ardupilot#33645](https://github.com/ArduPilot/ardupilot/pull/33645) — needs Pi 4 compatibility review
-4. **Post on Emlid community forum** (community.emlid.com) — "Navio2 on Pi 5 — working solution"
-5. **Post on ArduPilot Discourse** (discuss.ardupilot.org) — targeting Linux board users
-6. **Optional**: open issue on Emlid repo requesting official Pi 5 support
+2. **RCIO PR #12 (Pi 5 support)**: [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays
+3. **ArduPilot PR #33647 (Linux bugfixes)**: [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) — PWM_Sysfs retry, INS NONE backend for Linux
+4. **ArduPilot PR #33648 (Navio2 Pi 5)**: [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) — CRC skip, allow no sensors, pwmchip, native toolchain
+5. **Public repo**: [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) — full setup guide, scripts, overlays, docs
+6. **Post on Emlid community forum** (community.emlid.com) — "Navio2 on Pi 5 — working solution"
+7. **Post on ArduPilot Discourse** (discuss.ardupilot.org) — targeting Linux board users
+8. **Optional**: open issue on Emlid repo requesting official Pi 5 support

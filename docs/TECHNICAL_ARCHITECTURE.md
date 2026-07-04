@@ -311,5 +311,7 @@ flowchart TB
 | PR | Repo | Status | Description |
 |---|---|---|---|
 | [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) | emlid/rcio-dkms | Open | Bugfixes: error path, PWM API, probe abort, debug messages |
-| [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 platform support (guarded) |
-| [ArduPilot/ardupilot#33645](https://github.com/ArduPilot/ardupilot/pull/33645) | ArduPilot/ardupilot | Draft | Navio2 Pi 5 support (needs Pi 4 review) |
+| [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 platform support (dynamic GPIO base, module_param CS delays) |
+| [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) | ArduPilot/ardupilot | Open | Linux bugfixes: PWM_Sysfs retry, INS NONE backend for Linux |
+| [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) | ArduPilot/ardupilot | Open | Navio2 Pi 5: CRC skip, allow no sensors, pwmchip, native toolchain |
+| [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) | Public repo | Live | Full setup guide, scripts, overlays, documentation |

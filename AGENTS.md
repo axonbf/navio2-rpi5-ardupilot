@@ -79,7 +79,7 @@ sudo ./Build/LED
 - Phase 1-3: Navio2 driver port COMPLETE
 - Phase 4: Hailo AI + Camera + ROS2 integration IN PROGRESS
 - Phase 5: ArduPilot Rover on Pi 5 — **COMPLETE** (GPS 3D lock, IMU calibrated, PWM/ADC/RCIO working, RGB LED, systemd service)
-- Next step: end-to-end boat test with arming; external F9P GPS and Kogger depth sensor integration; clean up Pi 5 home directory; publish PRs (emlid/rcio-dkms#11 bugfixes, emlid/rcio-dkms#12 Pi 5 support, ArduPilot/ardupilot#33645 — all draft, need review).
+- Next step: end-to-end boat test with arming; external F9P GPS and Kogger depth sensor integration; clean up Pi 5 home directory; PRs open for review (emlid/rcio-dkms#11, #12, ArduPilot/ardupilot#33647, #33648).
 
 ## Communication Rules
 

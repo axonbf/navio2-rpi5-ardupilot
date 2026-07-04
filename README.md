@@ -33,8 +33,9 @@ See [docs/QUICK_START.md](docs/QUICK_START.md) for full setup instructions.
 ## Related PRs
 
 - [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — Bugfixes (PWM API, error path, probe abort)
-- [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — Pi 5 platform support
-- [ArduPilot/ardupilot#33645](https://github.com/ArduPilot/ardupilot/pull/33645) — Navio2 Pi 5 patches
+- [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — Pi 5 platform support (dynamic GPIO base, module_param CS delays)
+- [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) — Linux bugfixes (PWM_Sysfs retry, INS NONE backend)
+- [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) — Navio2 Pi 5 patches (CRC skip, allow no sensors, pwmchip, native toolchain)
 
 ## Tested hardware
 

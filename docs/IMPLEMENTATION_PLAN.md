@@ -72,9 +72,11 @@ Define the project work plan and record its technical evolution.
 - [ ] **Clean up Pi 5 home directory** (temp files, old logs)
 - [ ] **Publish solution**: fork emlid/rcio + ArduPilot PRs + forum posts
   - RCIO PR #11 (bugfixes): [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms
-  - RCIO PR #12 (Pi 5 support): [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — platform-guarded, depends on #11
-  - ArduPilot PR: [ArduPilot/ardupilot#33645](https://github.com/ArduPilot/ardupilot/pull/33645) — draft, needs Pi 4 compatibility review
-  - Old combined PR #10: closed, replaced by #11 + #12
+  - RCIO PR #12 (Pi 5 support): [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays
+  - ArduPilot PR #33647 (Linux bugfixes): [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) — PWM_Sysfs retry, INS NONE backend
+  - ArduPilot PR #33648 (Navio2 Pi 5): [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) — CRC skip, allow no sensors, pwmchip, native toolchain
+  - Public repo: [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) — full setup guide, scripts, overlays, docs
+  - Old PRs closed: emlid/rcio-dkms#10, ArduPilot/ardupilot#33645
   - Forum posts: Emlid community + ArduPilot Discourse
 
 #### ArduPilot run commands
