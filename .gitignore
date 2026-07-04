@@ -1,0 +1,46 @@
+# Build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+Module.symvers
+modules.order
+.tmp_versions/
+
+# Logs and temp files
+*.log
+*.err
+*.out
+*.strace
+*.bt
+*.pid
+*.tlog
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OpenCode internal
+opencode.json
+
+# Junk from debugging sessions
+EOF
+EOFSH
+fix_stm32.sh
+mav.parm
+mav.tlog
+mav.tlog.raw
+
+# Upstream reference clone (users don't need this)
+upstream/
+
+# Incomplete blackmagic port (not needed for operation)
+blackmagic_pi5/src/Build/
+docs/current_opencode_session.md

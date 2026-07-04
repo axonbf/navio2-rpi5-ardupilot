@@ -1,0 +1,19 @@
+[Unit]
+Description=ArduPilot Rover on Navio2 + Pi 5
+After=rp1-spi1-drive.service
+Wants=rp1-spi1-drive.service
+Documentation=https://docs.emlid.com/navio2/navio-ardupilot/installation-and-running/#autostarting-ardupilot-on-boot
+
+[Service]
+EnvironmentFile=/etc/default/ardurover
+ExecStartPre=/home/pi/rcio-startup.sh
+ExecStart=/bin/sh -c "/usr/bin/ardurover ${ARDUPILOT_OPTS} --defaults /home/pi/ardurover_work/boat_navio2.parm"
+Restart=on-failure
+RestartSec=5
+
+# Realtime scheduling for ArduPilot main loop
+LimitRTPRIO=98
+LimitRTTIME=infinity
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Set RP1 SPI1 GPIO drive strength to 8mA for Navio2 RCIO
+DefaultDependencies=no
+Before=basic.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rp1-spi1-drive.py
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,16 @@
+# Default settings for ArduPilot Rover on Navio2 + Pi 5
+# Sourced by systemd from ardurover.service
+
+# GCS telemetry via UDP
+TELEM1="--serial1 udp:192.168.178.20:14550"
+
+# H12 RC receiver on UART
+TELEM2="--serial2 /dev/ttyAMA0"
+
+# F9P Ublox GPS (external, if connected)
+#TELEM3="--serial3 /dev/ttyACM0"
+
+# Kogger depth sounder (if connected)
+#TELEM4="--serial4 /dev/ttyUSB0"
+
+ARDUPILOT_OPTS="$TELEM1 $TELEM2"

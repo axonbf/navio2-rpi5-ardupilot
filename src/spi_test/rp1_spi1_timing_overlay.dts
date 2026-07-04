@@ -1,0 +1,20 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2712";
+
+    fragment@0 {
+        target = <&spi1>;
+        __overlay__ {
+            rx-sample-delay-ns = <100>;
+
+            rcio@0 {
+                rx-sample-delay-ns = <100>;
+                spi-cs-setup-delay-ns = <1000>;
+                spi-cs-hold-delay-ns = <1000>;
+                spi-cs-inactive-delay-ns = <1000>;
+            };
+        };
+    };
+};
