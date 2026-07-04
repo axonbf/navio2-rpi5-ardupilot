@@ -79,13 +79,62 @@
 
 ## Notes for next session (Claude CLI)
 
-- **Always validate before committing** — build on Pi 5, test if runtime behavior changes.
-- **Always ask before applying changes to the Pi 5.**
+### Current state — READ THIS FIRST
+
+The PRs have been restructured from the original single PR into multiple PRs. Do NOT start from scratch. The current structure is:
+
+**RCIO (emlid/rcio-dkms):**
+- PR #11 (bugfixes): DONE, reviewed, validated, pushed. Branch: `bugfixes` on `axonbf/rcio-dkms`
+- PR #12 (Pi 5 support): DONE, reviewed, validated, pushed. Branch: `pi5-support-v2` on `axonbf/rcio-dkms`
+
+**ArduPilot (ArduPilot/ardupilot):**
+- PR #33647 (Linux bugfixes): DONE, validated on Pi 5, pushed. Branch: `linux-bugfixes` on `axonbf/ardupilot`
+  - Commit 1: `AP_HAL_Linux: PWM_Sysfs: add retry loop for duty_cycle fd open`
+  - Commit 2: `AP_InertialSensor: enable NONE backend when ALLOW_NO_SENSORS is set`
+  - Guard: `#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 || AP_INERTIALSENSOR_ALLOW_NO_SENSORS`
+  - Built and tested on Pi 5 — boots successfully
+- PR #33648 (Navio2 Pi 5): CREATED but **NOT GUARDED** — this is the immediate next task. Branch: `navio2-pi5-support` on `axonbf/ardupilot`
+  - 4 commits, 6 files need Pi 4 compatibility guards
+  - See conflict table above
+
+### How to get the working branches
+
+The `/tmp/` directories from the previous session will NOT persist. Clone from the forks:
+
+```bash
+# ArduPilot fork
+git clone https://github.com/axonbf/ardupilot.git /tmp/ardupilot_navio2_pi5
+cd /tmp/ardupilot_navio2_pi5
+git fetch origin tag Rover-4.6.3 --depth=1
+git checkout linux-bugfixes    # PR #33647 (done)
+git checkout navio2-pi5-support # PR #33648 (needs guards)
+
+# RCIO fork
+git clone https://github.com/axonbf/rcio-dkms.git /tmp/rcio_navio2_pi5
+cd /tmp/rcio_navio2_pi5
+git checkout bugfixes       # PR #11 (done)
+git checkout pi5-support-v2 # PR #12 (done)
+```
+
+### Pi 5 state
+
+The Pi 5 (`~/ardupilot/`) has a mix of old and new changes — some files were updated during validation, others are still the original unguarded versions. **Do NOT use the Pi 5 source as the source of truth for PRs.** Always work from the GitHub fork branches.
+
+The Pi 5's `~/ardupilot/libraries/AP_InertialSensor/AP_InertialSensor_NONE.h` and `.cpp` were updated and validated (PR #33647 changes). The other files on the Pi 5 are the old unguarded versions.
+
+### Rules
+
+- **Always validate before committing** — build on Pi 5 (`./waf build -j4`, ~15 min), test if runtime behavior changes.
+- **Always ask before applying changes to the Pi 5.** Do not push files, modify source, or rebuild without explicit user approval.
 - **Keep docs up-to-date** before moving to the next task.
 - **Communication rules** in `AGENTS.md`: no post-hoc rationalization, no telling user what they want to hear, transparent about method differences.
 - **PR #33648 is the immediate next task** — 6 files need Pi 4 compatibility guards.
-- **ArduPilot build takes ~15 min on Pi 5** — use long timeouts.
-- **CPU measurement**: use `ps -C ardurover` or `pgrep -x ardurover`, NOT `ps -o pcpu= -p $!` (reads sudo wrapper, gives 0%).
+
+### Access info
+
 - **SSH access**: `sshpass -p 'raspberry' ssh pi@192.168.178.42`
 - **Start ArduPilot**: `sudo ardurover --serial1 udp:192.168.178.20:14550 --defaults ~/ardurover_work/boat_navio2.parm`
 - **Stop ArduPilot**: `sudo systemctl stop ardurover` or `sudo killall ardurover`
+- **Build**: `cd ~/ardupilot && ./waf build -j4` (~15 min, use long timeouts)
+- **CPU measurement**: use `ps -C ardurover` or `pgrep -x ardurover`, NOT `ps -o pcpu= -p $!` (reads sudo wrapper, gives 0%)
+- **GitHub**: authenticated as `axonbf` (personal account)
