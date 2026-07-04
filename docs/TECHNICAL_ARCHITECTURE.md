@@ -178,7 +178,7 @@ flowchart TB
         RC3["rcio_pwm.c<br/>.apply/.get_state API"]
         RC4["rcio_adc.c"]
         RC5["rcio_rcin.c"]
-        RC6["rcio_gpio.c<br/>GPIO_CHIP_OFFSET 420 (Pi 5)"]
+        RC6["rcio_gpio.c<br/>GPIO_CHIP_OFFSET = -1 (dynamic)"]
         RC7["rcio_status.c<br/>Probe + CRC check"]
         RC8["rcio_safety.c"]
         RC2 --- RC3
@@ -235,8 +235,8 @@ flowchart TB
 
 - **Components**: `rcio_core.ko` + `rcio_spi.ko` (built from emlid/rcio-dkms with Pi 5 patches)
 - **Pi 5 specific changes** (all platform-guarded):
-  - `rcio_gpio.c`: `GPIO_CHIP_OFFSET = 420` on Pi 5 (RP1 GPIO starts at 512, base 500 overlaps)
-  - `rcio_spi.c`: CS delays 50/50/500 µs on Pi 5 only (`#ifdef CONFIG_ARCH_BCM2712`)
+  - `rcio_gpio.c`: `GPIO_CHIP_OFFSET = -1` (dynamic allocation — kernel picks free base, no platform guards needed)
+  - `rcio_spi.c`: CS delays via `module_param()` (defaults to 0; Pi 5 passes values via `insmod`)
   - `rcio_spi.c`: `remove` return type `void` on kernel 6.2+ (`LINUX_VERSION_CODE` guard)
   - `rcio_pwm.c`: `.apply/.get_state` API (old `.enable/.disable/.config` removed in kernel 5.13+)
   - `rcio-pi5-overlay.dts`: separate overlay for Pi 5 (bcm2712)
@@ -301,7 +301,7 @@ flowchart TB
 | GPIO drive strength | 16 mA default | 4 mA default → 12 mA fix needed |
 | SPI1 controller | BCM SoC `/soc/spi@7e215080` | RP1 `/axi/pcie@120000/rp1/spi@54000` |
 | SPI1 driver | `bcm2835-aux-spi` | `dw_spi_mmio` / `spi_dw` |
-| GPIO base for RCIO | 500 (no overlap) | 500 overlaps RP1 (base 512) → 420 |
+| GPIO base for RCIO | 500 (no overlap) | Dynamic (`-1`) — kernel assigns 625+ |
 | PWM ops API | `.enable/.disable/.config` | `.apply/.get_state` (kernel 5.13+) |
 | Device tree overlay | `rcio-overlay.dts` (bcm2709) | `rcio-pi5-overlay.dts` (bcm2712) |
 | Kernel | 5.x | 6.6 |

@@ -57,7 +57,7 @@ Define the project work plan and record its technical evolution.
   - Root cause 2: ported `rcio_spi.c` sent 0xFF on MOSI during read → fixed to RX-only
 - PWM (14ch), ADC (6ch), RCInput (16ch) all verified via ArduPilot ✅
 - **I2C + RCIO bus contention: RESOLVED** — MS5611 works concurrently with RCIO ✅
-- **Navio2 RGB LED: RESOLVED** — GPIO_CHIP_OFFSET changed from 500 to 420 (RP1 overlap), `navio2-led.dtbo` device tree overlay creates `/sys/class/leds/rgb_led{0,1,2}` ✅
+- **Navio2 RGB LED: RESOLVED** — `GPIO_CHIP_OFFSET = -1` (dynamic allocation), `navio2-led.dtbo` device tree overlay creates `/sys/class/leds/rgb_led{0,1,2}` ✅
 - Boat parameters migrated from Rover 4.0.0 to 4.6.3 (`boat_navio2.parm`) ✅
 - **Systemd service for ArduRover auto-start** ✅
   - `/etc/systemd/system/ardurover.service` — starts after `rp1-spi1-drive.service`, loads RCIO via `rcio-startup.sh`

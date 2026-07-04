@@ -57,9 +57,9 @@ sudo ./Build/LED
   1. RP1 GPIO defaults to 4 mA drive (BCM2711 uses 16 mA) — fixed via `rp1-spi1-drive.service` setting 12 mA on GPIO16/19/20/21.
   2. Ported `rcio_spi.c` sent 0xFF bytes on MOSI during read phase — original uses RX-only read. Fixed by restoring original `wait_complete()`.
 - RCIO SPI pins on Navio2 HAT: GPIO16=CS (pin 36), GPIO19=MISO (pin 35), GPIO20=MOSI (pin 38), GPIO21=SCLK (pin 40)
-- RCIO GPIO base changed from 500 to 420 on Pi 5 via `#ifdef CONFIG_ARCH_BCM2712` (Pi 4 keeps 500)
+- RCIO GPIO base: dynamic allocation (`GPIO_CHIP_OFFSET = -1`) — kernel picks free base on any platform
 - RCIO PWM API migrated from `.enable/.disable/.config` to `.apply/.get_state` (kernel 5.13+ removed old API)
-- RCIO SPI CS delays (50/50/500 µs) only active on Pi 5 via `#ifdef CONFIG_ARCH_BCM2712`
+- RCIO SPI CS delays via `module_param()` (defaults to 0; Pi 5 passes `cs_setup_us=50 cs_hold_us=50 cs_inactive_us=500`)
 - RCIO `spi_driver.remove` return type guarded by `LINUX_VERSION_CODE >= 6.2.0`
 - Separate device tree overlays: `rcio-overlay.dts` (Pi 4, bcm2709) and `rcio-pi5-overlay.dts` (Pi 5, bcm2712)
 - Navio2 RGB LED: device tree overlay `navio2-led.dtbo` creates `/sys/class/leds/rgb_led{0,1,2}` from GPIO4/6/27

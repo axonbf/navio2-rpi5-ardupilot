@@ -124,8 +124,8 @@ echo -e "blacklist rcio_spi\nblacklist rcio_core\ninstall rcio_spi /bin/true\nin
 **RCIO kernel module platform compatibility:**
 
 The RCIO source in this repo is platform-guarded for Pi 4 / Pi 5 compatibility:
-- `rcio_gpio.c`: `GPIO_CHIP_OFFSET` = 420 on Pi 5 (`CONFIG_ARCH_BCM2712`), 500 on Pi 4
-- `rcio_spi.c`: CS delays (50/50/500 µs) only on Pi 5; `remove` return type guarded by `LINUX_VERSION_CODE >= 6.2.0`
+- `rcio_gpio.c`: `GPIO_CHIP_OFFSET = -1` (dynamic allocation — kernel picks free base on any platform)
+- `rcio_spi.c`: CS delays via `module_param()` (defaults to 0; Pi 5 passes `cs_setup_us=50 cs_hold_us=50 cs_inactive_us=500`); `remove` return type guarded by `LINUX_VERSION_CODE >= 6.2.0`
 - `rcio_pwm.c`: Uses `.apply/.get_state` API (old `.enable/.disable/.config` removed in kernel 5.13+)
 - Separate overlays: `rcio-overlay.dts` (Pi 4, bcm2709) and `rcio-pi5-overlay.dts` (Pi 5, bcm2712)
 

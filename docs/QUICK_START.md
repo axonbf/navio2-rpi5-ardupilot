@@ -55,7 +55,7 @@ The `navio2-led.dtbo` overlay must also be in `/boot/firmware/overlays/`.
 Both are in this repo — compile and install:
 
 ```bash
-dtc -@ -I dts -O dtb -o /boot/firmware/overlays/rcio-pi5.dtbo rcio_source/rcio-overlay.dts
+dtc -@ -I dts -O dtb -o /boot/firmware/overlays/rcio-pi5.dtbo rcio_source/rcio-pi5-overlay.dts
 dtc -@ -I dts -O dtb -o /boot/firmware/overlays/navio2-led.dtbo rcio_source/navio2-led.dts
 ```
 
@@ -101,9 +101,9 @@ sudo mkdir -p /home/pi/rcio_build
 sudo cp *.ko /home/pi/rcio_build/
 ```
 
-**Pi 5 specific change**: `rcio_gpio.c` uses `GPIO_CHIP_OFFSET 420` on Pi 5 (via `#ifdef CONFIG_ARCH_BCM2712`), 500 on Pi 4.
-The source in this repo is platform-guarded — it compiles correctly for both Pi 4 and Pi 5.
+**Pi 5 specific**: `rcio_gpio.c` uses `GPIO_CHIP_OFFSET = -1` (dynamic allocation — kernel picks a free base automatically). No platform guards needed.
 The `rcio-pi5-overlay.dts` is a separate overlay for Pi 5 (bcm2712); the original `rcio-overlay.dts` (bcm2709) is kept for Pi 4.
+CS delays are passed as module parameters at load time (see Step 6).
 
 ---
 
@@ -129,7 +129,7 @@ set -e
 echo -1 > /proc/sys/kernel/sched_rt_runtime_us
 if ! lsmod | grep -q rcio_spi; then
     insmod /home/pi/rcio_build/rcio_core.ko
-    insmod /home/pi/rcio_build/rcio_spi.ko
+    insmod /home/pi/rcio_build/rcio_spi.ko cs_setup_us=50 cs_hold_us=50 cs_inactive_us=500
 fi
 for i in $(seq 1 10); do
     if [ -f /sys/kernel/rcio/status/alive ]; then
@@ -146,6 +146,8 @@ exit 0
 EOF
 sudo chmod +x /home/pi/rcio-startup.sh
 ```
+
+The `cs_setup_us=50 cs_hold_us=50 cs_inactive_us=500` parameters are Pi 5 specific — they configure the CS delays needed for RP1 SPI timing. On Pi 4, these parameters are not needed (defaults to 0).
 
 ---
 
@@ -237,8 +239,8 @@ sudo systemctl stop ardurover
 | Change | File | Why |
 |---|---|---|
 | GPIO drive strength 12 mA | `src/rp1-spi1-drive.py` + systemd service | RP1 defaults to 4 mA; Navio2 needs 12 mA for STM32 SPI |
-| RCIO GPIO base 420 | `rcio_source/src/rcio_gpio.c` (`#ifdef CONFIG_ARCH_BCM2712`) | Pi 5 RP1 GPIO starts at base 512; original 500 overlaps |
-| RCIO SPI CS delays | `rcio_source/src/rcio_spi.c` (`#ifdef CONFIG_ARCH_BCM2712`) | Pi 5 RP1 needs 50µs CS setup/hold; Pi 4 defaults to 0 |
+| RCIO GPIO base | `rcio_source/src/rcio_gpio.c` (`GPIO_CHIP_OFFSET = -1`) | Dynamic allocation — kernel picks free base on any platform |
+| RCIO SPI CS delays | `rcio_source/src/rcio_spi.c` (`module_param`) | Pi 5 RP1 needs 50µs CS setup/hold; passed via `insmod` parameters |
 | RCIO PWM API migration | `rcio_source/src/rcio_pwm.c` | `.apply/.get_state` replaces `.enable/.disable/.config` (removed in kernel 5.13+) |
 | RCIO `remove` return type | `rcio_source/src/rcio_spi.c` (`LINUX_VERSION_CODE >= 6.2.0`) | Kernel 6.2+ changed `spi_driver.remove` to return void |
 | Separate Pi 5 overlay | `rcio_source/rcio-pi5-overlay.dts` | Pi 5 uses bcm2712; original `rcio-overlay.dts` (bcm2709) kept for Pi 4 |
@@ -255,7 +257,7 @@ sudo systemctl stop ardurover
 | Path | Purpose |
 |---|---|
 | `src/` | Navio2 C++ driver library and examples (ported to libgpiod) |
-| `rcio_source/` | RCIO kernel module source (Pi 5 port, GPIO base 420, RX-only fix) |
+| `rcio_source/` | RCIO kernel module source (Pi 5 port, dynamic GPIO base, module_param CS delays) |
 | `rcio_source/navio2-led.dts` | Device tree overlay for RGB LED sysfs entries |
 | `src/rp1-spi1-drive.py` | RP1 12 mA drive-strength script |
 | `src/navio2_pi5_setup.sh` | Full automated setup script |

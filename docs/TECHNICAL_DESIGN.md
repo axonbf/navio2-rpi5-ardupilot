@@ -171,14 +171,14 @@ This is the target architecture for full autonomous marine robotics with AI perc
 
 | File | Change | Pi 4 impact | Safe for both? | Guard |
 |---|---|---|---|---|
-| `rcio_gpio.c` | `GPIO_CHIP_OFFSET` 500→420 | Breaks Pi 4 (base 500 is valid) | With guard | `#ifdef CONFIG_ARCH_BCM2712` |
+| `rcio_gpio.c` | `GPIO_CHIP_OFFSET = -1` (dynamic allocation) | None — kernel picks free base | Yes | None needed |
 | `rcio-overlay.dts` | `compatible` bcm2709→bcm2712 | Breaks Pi 4 (Pi 4 is bcm2711) | Separate file | `rcio-pi5-overlay.dts` for Pi 5 |
-| `rcio_spi.c` | CS delay macros (50/50/500 µs) | May affect Pi 4 timing | With guard | `#ifdef CONFIG_ARCH_BCM2712` |
+| `rcio_spi.c` | CS delays via `module_param()` | None — defaults to 0 | Yes | Module parameters |
 | `rcio_spi.c` | `read_clock_buffer` allocation | Safe — extra memory | Yes | None needed |
 | `rcio_spi.c` | `dev_warn` debug messages | Safe — just logging | Yes | None needed |
 | `rcio_spi.c` | `remove` returns `void` | Kernel 6.2+ API change | With guard | `LINUX_VERSION_CODE >= 6.2.0` |
 | `rcio_core.c` | Error path reorder | Safe — bugfix | Yes | None needed |
-| `rcio_core.c` | `EXPORT_SYMBOL_GPL` removal | May break out-of-tree modules | Keep export | Restored |
+| `rcio_core.c` | `EXPORT_SYMBOL_GPL(rcio_state)` | May break out-of-tree modules | Kept | Restored |
 | `rcio_pwm.c` | `enable/disable/config` → `apply/get_state` | Upstream already broken on 5.13+ | Yes (bugfix) | None needed |
 | `rcio_status.c` | Probe abort on all-failed | Safe — better error handling | Yes | None needed |
 | `navio2-led.dts` | New RGB LED overlay | Safe — only loaded if in config.txt | Yes | N/A |
