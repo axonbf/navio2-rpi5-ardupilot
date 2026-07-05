@@ -1,0 +1,40 @@
+// Navio2 on Raspberry Pi 5: add a 3rd SPI0 chip-select on GPIO22 so that
+// /dev/spidev0.2 exists for the LSM9DS1 magnetometer.
+//
+// The Pi 5's RP1 SPI0 exposes only 2 chip-selects by default
+// (spidev0.0 = U-blox GPS, spidev0.1 = MPU9250). The Navio2 wires the LSM9DS1
+// magnetometer chip-select to GPIO22 (spidev0.2). Without this overlay,
+// ArduPilot panics when the compass is enabled:
+//   "SPI: unable to open SPI bus /dev/spidev0.2: No such file or directory"
+//
+// With the overlay, /dev/spidev0.2 appears and the LSM9DS1 magnetometer +
+// AK8963 (via MPU9250) are both detected as compasses.
+//
+// Build:
+//   dtc -@ -I dts -O dtb -o navio2-spi0-cs2.dtbo navio2-spi0-cs2.dts
+// Then add to /boot/firmware/config.txt:  dtoverlay=navio2-spi0-cs2
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2712";
+
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            // CE0 (GPIO8) = spidev0.0, CE1 (GPIO7) = spidev0.1,
+            // GPIO22 = spidev0.2 (LSM9DS1 magnetometer). Flag 1 = active-low.
+            cs-gpios = <&gpio 8 1>, <&gpio 7 1>, <&gpio 22 1>;
+            status = "okay";
+
+            spidev@2 {
+                compatible = "spidev";
+                reg = <2>;
+                spi-max-frequency = <10000000>;
+            };
+        };
+    };
+};
