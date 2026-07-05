@@ -63,6 +63,7 @@ sudo ./Build/LED
 - RCIO `spi_driver.remove` return type guarded by `LINUX_VERSION_CODE >= 6.2.0`
 - Separate device tree overlays: `rcio-overlay.dts` (Pi 4, bcm2709) and `rcio-pi5-overlay.dts` (Pi 5, bcm2712)
 - Navio2 RGB LED: device tree overlay `navio2-led.dtbo` creates `/sys/class/leds/rgb_led{0,1,2}` from GPIO4/6/27
+- Navio2 compass: `navio2-spi0-cs2.dtbo` adds a 3rd SPI0 chip-select on GPIO22 → `/dev/spidev0.2` → LSM9DS1 magnetometer + AK8963 both detected as compasses. Pi 5 SPI0 exposes only 2 CS by default; without it, enabling the compass panics on the missing `/dev/spidev0.2`.
 - Pi 5 RCIO SPI1 uses RP1 `/axi/pcie@120000/rp1/spi@54000` with `dw_spi_mmio` / `spi_dw`; Pi 4 known-good uses BCM SoC SPI at `/soc/...spi@7e215080`
 - Pi 3 second-HAT known-good uses BCM aux SPI at `/soc/spi@7e215080`, `spi1.0`, `alive=1`, `board_name=navio2`, `crc=0xb9064332`, git hash `7851d1a`, `pwm_ok=1`
 - **No Pi-controlled NRST or BOOT0 pins on Navio2 HAT** — NRST hardwired HIGH (pull-up to 3.3V), BOOT0 tied to GND
@@ -71,7 +72,7 @@ sudo ./Build/LED
 
 - C++ standard: C++11 (`-std=c++11`)
 - Target: aarch64 only (Pi 5 native compilation)
-- Sensor status: 7/8 working — LSM9DS1 has hardware defect (WHO_AM_I = 0xFF); ArduPilot auto-skips it, uses MPU9250 as primary IMU
+- Sensor status: MPU9250 IMU + MS5611 baro + GPS + 2 compasses (LSM9DS1 magnetometer + AK8963, via `navio2-spi0-cs2` overlay) working. LSM9DS1 accel/gyro reads WHO_AM_I = 0xFF and is skipped (real defect vs. missing chip-select on GPIO25 under investigation)
 - Remote target: `ssh pi@<PI5_IP>` (replace with your Pi 5 IP)
 
 ## Current Phase
@@ -97,6 +98,15 @@ sudo ./Build/LED
 ## Change Application Rule
 
 **Always ask before applying changes to the Pi 5.** Do not push files, modify source, or rebuild without explicit user approval.
+
+## Plan-and-Approve Rule (STRICT — do not violate)
+
+**Never take a state-changing action without an explicit, per-step approval.** State-changing = edit/revert code, build, run on the Pi, git commit, push, edit files.
+
+1. Before such an action, present a CONCRETE plan: exact file(s), exact command(s), exact expected result. Then STOP and wait for a yes to THAT step.
+2. Approval for one step is NOT approval for the next. "Go ahead", "finish the table", "yes" to step N never authorizes step N+1.
+3. Never assume consent. If unsure whether something is approved, ask — do not act.
+4. One topic at a time. Do not mix topics. Keep answers concrete, no filler.
 
 ## Documentation Rules
 

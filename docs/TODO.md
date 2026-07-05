@@ -44,6 +44,36 @@
 | `AP_InertialSensor_NONE.h/cpp` | Enable NONE backend | Safe — opt-in | OK | In PR #33647, validated |
 | `PWM_Sysfs.cpp` | Retry loop for duty_cycle fd | Safe — retry with timeout | OK | In PR #33647, validated |
 
+### Revised issue map — updated 2026-07-05 (current master uses hwdef for Linux boards)
+
+Investigating against current ArduPilot master (`48afb18`) changed the picture: master migrated Linux boards to a **hwdef** system (`libraries/AP_HAL_Linux/hwdef/navio2/hwdef.dat`), which already solves two of the original changes.
+
+Final change map uses letters **A–G** (avoids collision with the old #1–#5). Both closed PRs (#33648 + #33647) folded in.
+
+| ID | (was) | Change | File(s) | Disposition | Validated | Approved |
+|----|-------|--------|---------|-------------|-----------|----------|
+| **A** | #1 | `toolchain='native'` | `boards.py` | **No code change** — 64-bit Pi builds pass `--toolchain=native` at configure (NOT obsolete — see correction below; document in QUICK_START) | ☑ master native build | ☑ |
+| **B** | #2 | `HAL_BARO_MS5611_I2C_BUS 1` | `AP_HAL/board/linux.h` | Drop — hwdef declares `BARO MS5611 I2C:1:0x77` | ☑ master: MS5611 on bus 1 | ☑ |
+| **C** | #3 | pwmchip index → runtime detect | `AP_HAL_Linux/HAL_Linux_Class.cpp` | **Keep → PR-1** | ☑ master: pwmchip6, 14 ch @ 1500 µs | ☑ |
+| **D** | #4 | skip MS5611 PROM CRC | `AP_Baro/AP_Baro_MS5611.cpp` | Drop — CRC valid on HW | ☑ master: CRC enforced, baro found | ☑ |
+| **E** | #5 | allow-no-sensors + warn | `AP_InertialSensor.cpp`, `_config.h` | Drop — dormant + unsafe global flip | ☑ boots on MPU9250 | ☑ |
+| **F** | — | enable NONE dummy-IMU backend | `AP_InertialSensor_NONE.*` | Drop — inert without E | via E | ☑ |
+| **G** | — | PWM_Sysfs `duty_cycle` retry loop | `AP_HAL_Linux/PWM_Sysfs.cpp` | **Keep → PR-2** | ☑ master: compiles + PWM works | ☑ |
+
+**Master build validation (2026-07-05):** cloned ArduPilot master (`5152cde`) → `~/ardupilot-master`, applied C+G, `./waf configure --board navio2 --toolchain=native` + `./waf rover` (exit 0), boot-tested the master binary (`ArduRover V4.8.0-dev`): `MS5611 found on bus 1` (B, D), **pwmchip6 with 14 channels @ 1500 µs** (C), MPU9250 normal boot (E). `~/ardupilot` (4.6.3) left untouched; boat down.
+
+**A correction (important):** the earlier "obsolete" verdict was **wrong**. Master's navio2 board still defaults to the `arm-linux-gnueabihf` (32-bit) toolchain, so a 64-bit Pi build fails unless you pass **`--toolchain=native`** at configure. It's a build flag, not a code change — so A stays out of the PR — but **QUICK_START Step 8 must be updated** to add `--toolchain=native` and to drop the now-removed #4/#5 (D/E) patch instructions.
+
+**PRs open (2026-07-05):** [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) (C, pwmchip runtime detection) and [#33656](https://github.com/ArduPilot/ardupilot/pull/33656) (G, PWM_Sysfs retry) — clean, template-formatted, hardware-tested, no AI trailer. RCIO PRs [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) + [#12](https://github.com/emlid/rcio-dkms/pull/12) still open (clean/mergeable; #12 stacked on #11).
+
+**Compass resolved (2026-07-05):** Pi 5's SPI0 lacked `/dev/spidev0.2` (RP1 exposes only 2 CS), so enabling the compass **panicked**. Added `navio2-spi0-cs2` overlay (3rd CS on GPIO22) → `spidev0.2` appears → **2 compasses detected** (LSM9DS1 magnetometer devtype 6 on spidev0.2 + AK8963 devtype 4 via MPU9250). Compass enabled in `boat_navio2.parm` (backup `.pre-compass.bak`); calibration pending. QUICK_START/AGENTS/overlay source updated. **Open follow-up:** is the LSM9DS1 accel/gyro (GPIO25) also just a missing chip-select rather than defective?
+
+**#5 validation (2026-07-05):** reverted *only* #5 on the Pi's 4.6.3 tree (backups saved as `.pre5.bak`), rebuilt ArduRover (13m46s), boot-tested. Result: boots identically on the real MPU9250 — no panic, no NONE backend, no `unable to initialise`, MS5611 found. Confirmed the running binary was the freshly-built one (mtime matches build end; both #5-only strings absent from the binary via `strings`). Conclusion: #5's code was dormant (MPU9250 works); the broken **LSM9DS1** is skipped by ArduPilot's baseline runtime probing (`WHO_AM_I=0xFF`), not by #5. **#33648 will not include #5.** Boat left stopped after the test; #5 kept reverted on the Pi.
+
+**#3 validation (2026-07-05):** replaced the hard-coded pwmchip index with a runtime helper `navio2_rcio_pwmchip()` in `HAL_Linux_Class.cpp` (backup `.pre3.bak`). It scans `/sys/class/pwm/pwmchip*/npwm` and picks the RCIO chip by its 14-channel count — `pwmchip0` on Pi 4 (BCM), `pwmchip6` on Pi 5 (RP1 shifts enumeration). Chosen over `UtilRPI::detect_linux_board_type()` because `rcoutDriver` is a static global built before `hal.util` is ready. Rebuilt (compiles clean, exit 0) and boot-tested on the Pi 5: helper selected **pwmchip6**, all **14 channels exported** (pwm0–pwm13) at **50 Hz** (period 20 ms) with **1500 µs** neutral on active outputs (pwm0/pwm2); `pwmchip0`/`pwmchip2` untouched. Pi 4 path (chip 0) correct by construction, not hardware-tested. Boat left down.
+
+**#4 investigation (2026-07-05, read-only — no change applied):** with the boat stopped, read the MS5611 PROM directly over `i2c-1` (0x77) and computed the MS5611 CRC4. C1–C6 are valid calibration values; stored `crc_read=0xF` equals computed CRC `0xF` → **the barometer's CRC is valid on this hardware.** The CRC-skip (#4) is therefore unnecessary — most likely a stale workaround from before the I²C/RCIO bus contention was resolved (task 1). **Recommendation: drop #4**, restoring upstream CRC enforcement. Definitive confirmation pending user go-ahead: revert #4 on the Pi, rebuild, and verify `MS5611 found on bus 1 address 0x77` still appears at ArduPilot init. **Confirmed:** reverted #4 on the Pi (backup `.pre4.bak`), rebuilt, boot-tested with CRC enforced → `MS5611 found on bus 1 address 0x77` still appears, so the CRC passes at ArduPilot init. #4 dropped.
+
 ### Pending
 
 | # | Task | Priority | Sub-tasks |

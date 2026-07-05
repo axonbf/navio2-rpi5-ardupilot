@@ -12,7 +12,8 @@ A Raspberry Pi 5 running ArduPilot Rover with full Navio2 HAT support:
 - MPU9250 IMU (SPI, calibrated via QGC)
 - RCIO coprocessor (PWM ×14, ADC ×6, RC input ×16)
 - RGB LED status indicator
-- LSM9DS1 is defective on this HAT — ArduPilot auto-skips it
+- Compass: LSM9DS1 magnetometer + AK8963 (both via the `navio2-spi0-cs2` overlay)
+- LSM9DS1 accel/gyro reads `WHO_AM_I=0xFF` on this HAT — ArduPilot auto-skips it (its magnetometer works)
 
 **Target**: boat autopilot, ArduRover 4.6.3 `navio2` board subtype, Pi 5 Bookworm 64-bit.
 
@@ -46,16 +47,20 @@ dtparam=i2c_arm=on
 dtoverlay=spi1-1cs,cs0_pin=16,cs0_spidev=disabled
 dtoverlay=rcio-pi5
 
+# Navio2 SPI0 3rd chip-select on GPIO22 → creates /dev/spidev0.2 for the
+# LSM9DS1 magnetometer. Pi 5's SPI0 exposes only 2 CS by default; without
+# this, enabling the compass panics on a missing /dev/spidev0.2.
+dtoverlay=navio2-spi0-cs2
+
 # Navio2 RGB LED (GPIO4=Red, GPIO6=Blue, GPIO27=Green)
 dtoverlay=navio2-led
 ```
 
-The `rcio-pi5.dtbo` overlay must be in `/boot/firmware/overlays/`.
-The `navio2-led.dtbo` overlay must also be in `/boot/firmware/overlays/`.
-Both are in this repo — compile and install:
+The `.dtbo` overlays must be in `/boot/firmware/overlays/`. They are all in this repo — compile and install:
 
 ```bash
 dtc -@ -I dts -O dtb -o /boot/firmware/overlays/rcio-pi5.dtbo rcio_source/rcio-pi5-overlay.dts
+dtc -@ -I dts -O dtb -o /boot/firmware/overlays/navio2-spi0-cs2.dtbo rcio_source/navio2-spi0-cs2.dts
 dtc -@ -I dts -O dtb -o /boot/firmware/overlays/navio2-led.dtbo rcio_source/navio2-led.dts
 ```
 
@@ -248,6 +253,7 @@ sudo systemctl stop ardurover
 | RCIO PWM API migration | `rcio_source/src/rcio_pwm.c` | `.apply/.get_state` replaces `.enable/.disable/.config` (removed in kernel 5.13+) |
 | RCIO `remove` return type | `rcio_source/src/rcio_spi.c` (`LINUX_VERSION_CODE >= 6.2.0`) | Kernel 6.2+ changed `spi_driver.remove` to return void |
 | Separate Pi 5 overlay | `rcio_source/rcio-pi5-overlay.dts` | Pi 5 uses bcm2712; original `rcio-overlay.dts` (bcm2709) kept for Pi 4 |
+| Navio2 SPI0 3rd CS | `rcio_source/navio2-spi0-cs2.dts` (GPIO22) | Creates `/dev/spidev0.2` for the LSM9DS1 magnetometer; Pi 5 SPI0 has only 2 CS by default. Without it, enabling the compass panics. |
 | RGB LED device tree | `rcio_source/navio2-led.dts` | Creates `/sys/class/leds/rgb_led0/1/2` for ArduPilot status LED |
 | RCIO blacklisted at boot | `/etc/modprobe.d/blacklist-rcio.conf` | Prevents I2C contention; loaded by rcio-startup.sh |
 | RT throttling disabled | `rcio-startup.sh` sets `sched_rt_runtime_us=-1` | Standard for ArduPilot on Linux |
@@ -272,8 +278,9 @@ sudo systemctl stop ardurover
 
 ## Known hardware defect
 
-**LSM9DS1**: WHO_AM_I returns `0xFF` (hardware failure on this HAT).
-ArduPilot detects this at startup and silently skips it. MPU9250 IMU works normally.
+**LSM9DS1 accel/gyro**: `WHO_AM_I` returns `0xFF` on this HAT — ArduPilot skips it and uses the MPU9250 as the IMU.
+
+**LSM9DS1 magnetometer**: works. It was previously unreachable on Pi 5 because `/dev/spidev0.2` did not exist; the `navio2-spi0-cs2` overlay fixes that, and the LSM9DS1 mag + AK8963 are both detected as compasses. (Whether the accel/gyro `0xFF` is a real defect or a similar missing chip-select on GPIO25 is under investigation.)
 
 ---
 
