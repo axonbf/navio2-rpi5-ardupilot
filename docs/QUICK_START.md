@@ -13,7 +13,7 @@ A Raspberry Pi 5 running ArduPilot Rover with full Navio2 HAT support:
 - RCIO coprocessor (PWM ×14, ADC ×6, RC input ×16)
 - RGB LED status indicator
 - Compass: LSM9DS1 magnetometer + AK8963 (both via the `navio2-spi0-cs2` overlay)
-- LSM9DS1 accel/gyro reads `WHO_AM_I=0xFF` on this HAT — ArduPilot auto-skips it (its magnetometer works)
+- LSM9DS1 accel/gyro is **not** used as an IMU — ArduPilot runs on the MPU9250 (2nd-IMU deferred; not a hardware defect — see Sensor notes)
 
 **Target**: boat autopilot, ArduRover 4.6.3 `navio2` board subtype, Pi 5 Bookworm 64-bit.
 
@@ -174,6 +174,24 @@ ls /sys/class/leds/                         # must include: rgb_led0  rgb_led1  
 
 ## Step 8 — Build ArduPilot Rover
 
+### Get the source (pinned)
+
+Sensors need **no** patch — upstream `navio2` hwdef already declares MPU9250 + LSM9DS1 mag + AK8963. Only two small ArduPilot changes are required, and both live as open PRs on **this project's own fork** (`axonbf/ardupilot`). Because they are on your account, the branches stay available even if the PRs are never approved. Pin them by exact commit so a fresh build reproduces this status even if a branch is later force-pushed:
+
+```bash
+git clone https://github.com/ArduPilot/ardupilot.git ~/ardupilot
+cd ~/ardupilot
+git remote add axonbf https://github.com/axonbf/ardupilot.git
+git fetch axonbf pr-navio2-pwmchip pr-pwm-sysfs-retry
+git cherry-pick 84182acccb82dabbb771afcb30d400bc742282d9   # C: RCIO pwmchip runtime detect (Pi4→pwmchip0, Pi5→pwmchip6) — PR #33655
+git cherry-pick 15967de4b9fdde3d7b99bfa533e6c22fe701c66e   # G: PWM_Sysfs duty_cycle retry on slow sysfs export      — PR #33656
+git submodule update --init --recursive
+```
+
+Both are single, self-contained commits. If either PR is merged upstream later, skip its cherry-pick (it becomes a no-op).
+
+### Configure + build
+
 On a 64-bit Pi you must select the native toolchain — the `navio2` board otherwise defaults to the 32-bit `arm-linux-gnueabihf` cross-compiler:
 
 ```bash
@@ -183,10 +201,6 @@ cd ~/ardupilot
 ```
 
 On current ArduPilot master the baro I²C bus is set by the board hwdef. On older releases (e.g. 4.6.x) also add `--define=HAL_BARO_MS5611_I2C_BUS=1`.
-
-**Source patches** (only needed on releases that predate them — both are being upstreamed):
-1. `AP_HAL_Linux/HAL_Linux_Class.cpp` — detect the RCIO pwmchip at runtime (Pi 4 → pwmchip0, Pi 5 → pwmchip6) — PR ArduPilot/ardupilot#33655
-2. `AP_HAL_Linux/PWM_Sysfs.cpp` — retry the duty_cycle open for slow sysfs export — PR ArduPilot/ardupilot#33656
 
 The earlier MS5611 CRC-skip and INS "allow no sensors" patches are **no longer used** — validated unnecessary (the MS5611 PROM CRC is valid on this hardware, and ArduPilot runs on the working MPU9250).
 
@@ -260,6 +274,19 @@ sudo systemctl stop ardurover
 | ArduPilot RCIO pwmchip | `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (Pi 4 = 0, Pi 5 = 6) — PR #33655 |
 | ArduPilot PWM_Sysfs retry | `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry duty_cycle open for slow sysfs export — PR #33656 |
 
+### Pinned commits (reproducibility)
+
+Every external dependency is pinned so a clean SD card reproduces this exact status. The RCIO kernel module **and all overlays are vendored in `rcio_source/` in this repo** — no external fetch needed for them. Only ArduPilot is fetched, from this project's fork:
+
+| Change | Fork (your account) | Branch | Commit | PR | How it's obtained |
+|---|---|---|---|---|---|
+| RCIO pwmchip runtime detect | `axonbf/ardupilot` | `pr-navio2-pwmchip` | `84182ac` | #33655 | cherry-pick (Step 8) |
+| PWM_Sysfs duty_cycle retry | `axonbf/ardupilot` | `pr-pwm-sysfs-retry` | `15967de` | #33656 | cherry-pick (Step 8) |
+| RCIO bugfixes | `axonbf/rcio-dkms` | `bugfixes` | `e2d2c36` | #11 | vendored in `rcio_source/` |
+| RCIO Pi 5 support | `axonbf/rcio-dkms` | `pi5-support-v2` | `3af18f3` | #12 | vendored in `rcio_source/` |
+
+The forks are on **your** GitHub account, so these branches remain available whether or not the upstream PRs are ever approved. Pinning the commit SHA additionally protects against a later force-push of your own branch. The two `rcio-dkms` commits are recorded for provenance only — reproduction builds the module directly from `rcio_source/`.
+
 ---
 
 ## Files in this repository
@@ -276,11 +303,11 @@ sudo systemctl stop ardurover
 
 ---
 
-## Known hardware defect
+## Sensor notes
 
-**LSM9DS1 accel/gyro**: `WHO_AM_I` returns `0xFF` on this HAT — ArduPilot skips it and uses the MPU9250 as the IMU.
+**LSM9DS1 magnetometer**: works as the 2nd compass. It was unreachable on Pi 5 until the `navio2-spi0-cs2` overlay created `/dev/spidev0.2`; now the LSM9DS1 mag + AK8963 are both detected as compasses.
 
-**LSM9DS1 magnetometer**: works. It was previously unreachable on Pi 5 because `/dev/spidev0.2` did not exist; the `navio2-spi0-cs2` overlay fixes that, and the LSM9DS1 mag + AK8963 are both detected as compasses. (Whether the accel/gyro `0xFF` is a real defect or a similar missing chip-select on GPIO25 is under investigation.)
+**LSM9DS1 accel/gyro (2nd IMU) — not a hardware defect (verified 2026-07-05).** With a dedicated chip-select (`spidev0.3`) the accel reads valid ~1 g data over raw SPI at every speed. But ArduPilot's LSM9DS1 **IMU driver** never reads it at runtime on Pi 5 / RP1 — its periodic callback never fires — so the instance streams zeros and, with `INS_ENABLE_MASK=3`, stalls gyro-cal at boot. The 2nd IMU is therefore **deferred to future work** (upstream driver issue, not the chip). This build uses the MPU9250 as the sole IMU (`INS_ENABLE_MASK=1`). Without a 4th chip-select, `WHO_AM_I` reads `0xFF` and ArduPilot skips it automatically. See `docs/TODO.md`.
 
 ---
 
