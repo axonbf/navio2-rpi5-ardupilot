@@ -169,17 +169,21 @@ ls /sys/class/leds/                         # must include: rgb_led0  rgb_led1  
 
 ## Step 8 — Build ArduPilot Rover
 
+On a 64-bit Pi you must select the native toolchain — the `navio2` board otherwise defaults to the 32-bit `arm-linux-gnueabihf` cross-compiler:
+
 ```bash
 cd ~/ardupilot
-./waf configure --board navio2 --define=HAL_BARO_MS5611_I2C_BUS=1
+./waf configure --board navio2 --toolchain=native
 ./waf build -j4
 ```
 
-**Required source patches** (already applied in the project fork):
-1. `AP_Baro_MS5611.cpp` — skip PROM CRC check (Navio2 MS5611 returns CRC=0)
-2. `AP_InertialSensor_config.h` — `AP_INERTIALSENSOR_ALLOW_NO_SENSORS 1`
-3. `AP_InertialSensor_NONE.h/cpp` — enable dummy INS backend for Linux
-4. `AP_InertialSensor.cpp` — warn instead of panic when no IMU found
+On current ArduPilot master the baro I²C bus is set by the board hwdef. On older releases (e.g. 4.6.x) also add `--define=HAL_BARO_MS5611_I2C_BUS=1`.
+
+**Source patches** (only needed on releases that predate them — both are being upstreamed):
+1. `AP_HAL_Linux/HAL_Linux_Class.cpp` — detect the RCIO pwmchip at runtime (Pi 4 → pwmchip0, Pi 5 → pwmchip6) — PR ArduPilot/ardupilot#33655
+2. `AP_HAL_Linux/PWM_Sysfs.cpp` — retry the duty_cycle open for slow sysfs export — PR ArduPilot/ardupilot#33656
+
+The earlier MS5611 CRC-skip and INS "allow no sensors" patches are **no longer used** — validated unnecessary (the MS5611 PROM CRC is valid on this hardware, and ArduPilot runs on the working MPU9250).
 
 ---
 
@@ -247,8 +251,8 @@ sudo systemctl stop ardurover
 | RGB LED device tree | `rcio_source/navio2-led.dts` | Creates `/sys/class/leds/rgb_led0/1/2` for ArduPilot status LED |
 | RCIO blacklisted at boot | `/etc/modprobe.d/blacklist-rcio.conf` | Prevents I2C contention; loaded by rcio-startup.sh |
 | RT throttling disabled | `rcio-startup.sh` sets `sched_rt_runtime_us=-1` | Standard for ArduPilot on Linux |
-| ArduPilot CRC skip | `AP_Baro_MS5611.cpp` | Navio2 MS5611 returns CRC=0 in PROM word 7 |
-| ArduPilot INS fallback | `AP_InertialSensor_*` patches | Allow boot without LSM9DS1; warn instead of panic |
+| ArduPilot RCIO pwmchip | `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (Pi 4 = 0, Pi 5 = 6) — PR #33655 |
+| ArduPilot PWM_Sysfs retry | `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry duty_cycle open for slow sysfs export — PR #33656 |
 
 ---
 
