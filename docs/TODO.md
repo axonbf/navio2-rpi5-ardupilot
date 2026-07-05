@@ -158,11 +158,17 @@ git checkout bugfixes       # PR #11 (done)
 git checkout pi5-support-v2 # PR #12 (done)
 ```
 
-### Pi 5 state
+### Pi 5 state (updated 2026-07-05)
 
-The Pi 5 (`~/ardupilot/`) has a mix of old and new changes — some files were updated during validation, others are still the original unguarded versions. **Do NOT use the Pi 5 source as the source of truth for PRs.** Always work from the GitHub fork branches.
+**Active working tree is `~/ardupilot-master`** (fresh clone of ArduPilot master) — NOT the old `~/ardupilot` (4.6.3), which is kept only for reference; do not build it. Current `~/ardupilot-master`:
+- Branch `pr-navio2-pwmchip` (fork `axonbf`), 1 commit ahead of master: `84182ac` (change C, RCIO pwmchip runtime detect = PR #33655).
+- `libraries/AP_HAL_Linux/PWM_Sysfs.cpp` is an **uncommitted** working-tree edit (change G = PR #33656; that PR's own branch is `pr-pwm-sysfs-retry` @ `15967de`).
+- `hwdef.dat` + the LSM9DS1 driver are pristine/upstream (2nd-IMU revert complete). `INS_ENABLE_MASK=1` → clean **1 IMU (MPU9250) + 2 compass** system, boots fully.
+- Leftover `.bak` files in the tree (`hwdef.dat.pre-imu.bak`, `AP_InertialSensor_LSM9DS1.cpp.{dbgbak,fifobak,rrbak}`, `overlays/*.dtbo.4cs.bak`) — safe to delete (cleanup pending, task #15).
+- `/usr/bin/ardurover` → symlink to `~/ardupilot-master/build/navio2/bin/ardurover`. Systemd service + `boat_navio2.parm` live in `~/ardurover_work` (service `WorkingDirectory` pinned there so param storage is stable).
+- **Build gotcha:** on Linux boards `hwdef.dat` is regenerated at `./waf configure` time, not `./waf rover` — always reconfigure after editing it, or the build silently reuses a stale `hwdef.h`.
 
-The Pi 5's `~/ardupilot/libraries/AP_InertialSensor/AP_InertialSensor_NONE.h` and `.cpp` were updated and validated (PR #33647 changes). The other files on the Pi 5 are the old unguarded versions.
+**Do NOT treat the Pi source as the source of truth for PRs** — the canonical PR content is the fork branches (`pr-navio2-pwmchip`, `pr-pwm-sysfs-retry`).
 
 ### Rules
 
@@ -177,6 +183,6 @@ The Pi 5's `~/ardupilot/libraries/AP_InertialSensor/AP_InertialSensor_NONE.h` an
 - **SSH access**: `sshpass -p 'raspberry' ssh pi@192.168.178.42`
 - **Start ArduPilot**: `sudo ardurover --serial1 udp:192.168.178.20:14550 --defaults ~/ardurover_work/boat_navio2.parm`
 - **Stop ArduPilot**: `sudo systemctl stop ardurover` or `sudo killall ardurover`
-- **Build**: `cd ~/ardupilot && ./waf build -j4` (~15 min, use long timeouts)
+- **Build**: `cd ~/ardupilot-master && ./waf configure --board navio2 --toolchain=native && ./waf rover` (reconfigure required after any `hwdef.dat` edit; ~6–8 min incremental, ~25–40 min from scratch — use long timeouts). The old `~/ardupilot` (4.6.3) is reference-only.
 - **CPU measurement**: use `ps -C ardurover` or `pgrep -x ardurover`, NOT `ps -o pcpu= -p $!` (reads sudo wrapper, gives 0%)
 - **GitHub**: authenticated as `axonbf` (personal account)
