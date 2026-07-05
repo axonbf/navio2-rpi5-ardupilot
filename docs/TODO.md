@@ -66,7 +66,7 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 
 **PRs open (2026-07-05):** [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) (C, pwmchip runtime detection) and [#33656](https://github.com/ArduPilot/ardupilot/pull/33656) (G, PWM_Sysfs retry) — clean, template-formatted, hardware-tested, no AI trailer. RCIO PRs [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) + [#12](https://github.com/emlid/rcio-dkms/pull/12) still open (clean/mergeable; #12 stacked on #11).
 
-**Compass resolved (2026-07-05):** Pi 5's SPI0 lacked `/dev/spidev0.2` (RP1 exposes only 2 CS), so enabling the compass **panicked**. Added `navio2-spi0-cs2` overlay (3rd CS on GPIO22) → `spidev0.2` appears → **2 compasses detected** (LSM9DS1 magnetometer devtype 6 on spidev0.2 + AK8963 devtype 4 via MPU9250). Compass enabled in `boat_navio2.parm` (backup `.pre-compass.bak`); calibration pending. QUICK_START/AGENTS/overlay source updated. **Open follow-up:** is the LSM9DS1 accel/gyro (GPIO25) also just a missing chip-select rather than defective?
+**Compass resolved (2026-07-05):** Pi 5's SPI0 lacked `/dev/spidev0.2` (RP1 exposes only 2 CS), so enabling the compass **panicked**. Added `navio2-spi0-cs2` overlay (3rd CS on GPIO22) → `spidev0.2` appears → **2 compasses detected** (LSM9DS1 magnetometer devtype 6 on spidev0.2 + AK8963 devtype 4 via MPU9250). Compass enabled in `boat_navio2.parm` (backup `.pre-compass.bak`); **calibration completed successfully by user.** QUICK_START/AGENTS/overlay source updated. **Follow-up ANSWERED (see 2nd-IMU note below):** the LSM9DS1 accel/gyro on GPIO25 is **not** defective — the chip is healthy; the blocker is ArduPilot's LSM9DS1 IMU driver on Pi 5 / RP1, not hardware.
 
 **#5 validation (2026-07-05):** reverted *only* #5 on the Pi's 4.6.3 tree (backups saved as `.pre5.bak`), rebuilt ArduRover (13m46s), boot-tested. Result: boots identically on the real MPU9250 — no panic, no NONE backend, no `unable to initialise`, MS5611 found. Confirmed the running binary was the freshly-built one (mtime matches build end; both #5-only strings absent from the binary via `strings`). Conclusion: #5's code was dormant (MPU9250 works); the broken **LSM9DS1** is skipped by ArduPilot's baseline runtime probing (`WHO_AM_I=0xFF`), not by #5. **#33648 will not include #5.** Boat left stopped after the test; #5 kept reverted on the Pi.
 
@@ -74,10 +74,20 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 
 **#4 investigation (2026-07-05, read-only — no change applied):** with the boat stopped, read the MS5611 PROM directly over `i2c-1` (0x77) and computed the MS5611 CRC4. C1–C6 are valid calibration values; stored `crc_read=0xF` equals computed CRC `0xF` → **the barometer's CRC is valid on this hardware.** The CRC-skip (#4) is therefore unnecessary — most likely a stale workaround from before the I²C/RCIO bus contention was resolved (task 1). **Recommendation: drop #4**, restoring upstream CRC enforcement. Definitive confirmation pending user go-ahead: revert #4 on the Pi, rebuild, and verify `MS5611 found on bus 1 address 0x77` still appears at ArduPilot init. **Confirmed:** reverted #4 on the Pi (backup `.pre4.bak`), rebuilt, boot-tested with CRC enforced → `MS5611 found on bus 1 address 0x77` still appears, so the CRC passes at ArduPilot init. #4 dropped.
 
+**LSM9DS1 as 2nd IMU — investigated 2026-07-05, DEFERRED to future work.** Goal was a 2nd IMU for redundancy using the LSM9DS1 accel/gyro (spidev0.3, GPIO25).
+
+- **Chip is healthy.** Raw `spidev` reads of the accel output registers (0x28–0x2D) return valid ~1 g gravity data at **every** SPI speed 1–10 MHz. WHO_AM_I = 0x68. Not a hardware defect.
+- **ArduPilot's LSM9DS1 IMU backend never reads it at runtime on Pi 5 / RP1.** The instance registers (`INS_ACC2_ID` set) but its periodic read callback **never fires** (0 reads in 26 s), so it streams flat zeros. Worse, with `INS_ENABLE_MASK=3` the phantom instance **stalls gyro-cal at boot** (`Init Gyro***` forever).
+- **Tried, none produced data:** (1) `INS_ENABLE_MASK` gating — found it was blocking the probe entirely, set to 3; (2) FIFO-bypass + direct-register reads in `_poll_data`; (3) SPI speed 1–10 MHz; (4) disabling the LSM9DS1 compass (ruled out mag/AG chip contention); (5) swapping `_dev->transfer()` → `_dev->read_registers()` (the exact call the working MPU9250 uses). Instrumented the read path with `printf` — confirmed the read function is never called.
+- **Root cause:** ArduPilot's LSM9DS1 INS backend lifecycle on this platform (callback never registers/executes), not the chip, SPI, speed, FIFO, or config writes.
+- **Reverted** to clean 1 IMU (MPU9250) + 2 compasses (AK8963 + LSM9DS1 mag). On-Pi backups: `hwdef.dat.pre-imu.bak`, `*.dtbo.4cs.bak`. `hwdef.dat` + driver restored to pristine; only the 2 PR keepers (C in `HAL_Linux_Class.cpp`, G in `PWM_Sysfs.cpp`) remain modified. Verified: 1 IMU + 2 compass, boots fully.
+- **Note (build gotcha):** on Linux boards `hwdef.dat` is processed at **`./waf configure`** time, not `./waf rover` — a build-only run silently reuses the stale generated `hwdef.h`. Always reconfigure after editing `hwdef.dat`.
+
 ### Pending
 
 | # | Task | Priority | Sub-tasks |
 |---|---|---|---|
+| 8 | LSM9DS1 2nd IMU (deferred) | Low | Future work only — see verdict above; needs upstream LSM9DS1 backend debug on Pi 5 / RP1 |
 | 9 | Repair LiPo power connector | High | Physical repair (user) — fire risk before water test |
 | 14 | Full QGC calibration | High | Radio calibration, flight modes, failsafe, servo direction |
 | 15 | Clean up Pi 5 home directory | Medium | Remove ~80 debug files, old params, stale dirs |
@@ -87,7 +97,7 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 
 ## Next Steps (immediate priority)
 
-1. **Fix PR #33648** — add `#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2` guards to 4 files, handle pwmchip index and toolchain for Pi 4 compatibility. Validate on Pi 5 before pushing.
+1. **Await review on PRs #33655 (C) + #33656 (G)** — both open, clean, hardware-tested. The old unguarded #33647/#33648 were closed and superseded; no further guard work needed.
 2. **Forum posts** — Emlid community + ArduPilot Discourse.
 3. **Repair LiPo power connector** (user task).
 4. **Full QGC calibration** — radio, flight modes, failsafe, servo direction.
@@ -101,17 +111,19 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 |---|---|---|---|
 | [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) | emlid/rcio-dkms | Open | Bugfixes — safe for all platforms, ready for review |
 | [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 support — dynamic GPIO, module_param, ready for review |
-| [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) | ArduPilot/ardupilot | Open | Linux bugfixes — validated on Pi 5, ready for review |
-| [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) | ArduPilot/ardupilot | Open | Navio2 Pi 5 — **needs guards added before review** |
+| [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) | ArduPilot/ardupilot | **Open** | Change C — Navio2 RCIO pwmchip runtime detection. Clean, template-formatted, hardware-tested, no AI trailer |
+| [ArduPilot/ardupilot#33656](https://github.com/ArduPilot/ardupilot/pull/33656) | ArduPilot/ardupilot | **Open** | Change G — PWM_Sysfs duty_cycle retry on slow export. Clean, template-formatted, hardware-tested |
 | [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) | Public repo | Live | Setup guide, scripts, overlays, docs |
 | ~~emlid/rcio-dkms#10~~ | emlid/rcio-dkms | Closed | Replaced by #11 + #12 |
-| ~~ArduPilot/ardupilot#33645~~ | ArduPilot/ardupilot | Closed | Replaced by #33647 + #33648 |
+| ~~ArduPilot/ardupilot#33645~~ | ArduPilot/ardupilot | Closed | Replaced by earlier PRs |
+| ~~ArduPilot/ardupilot#33647~~ | ArduPilot/ardupilot | Closed | Unguarded "AI slop" draft — superseded by #33656 (G) |
+| ~~ArduPilot/ardupilot#33648~~ | ArduPilot/ardupilot | Closed | Unguarded draft — superseded by #33655 (C) |
 
 ## Notes for next session (Claude CLI)
 
-### Current state — READ THIS FIRST
+### Current state — READ THIS FIRST (updated 2026-07-05)
 
-The PRs have been restructured from the original single PR into multiple PRs. Do NOT start from scratch. The current structure is:
+**Up to date as of 2026-07-05:** ArduPilot changes are now **two clean PRs — #33655 (C, pwmchip runtime detect) and #33656 (G, PWM_Sysfs retry)** — both OPEN, hardware-tested, awaiting review. The old drafts **#33647 + #33648 are CLOSED/superseded** (see PR Tracker). Work now happens against **ArduPilot master** cloned to `~/ardupilot-master` on the Pi (not the old 4.6.3 `~/ardupilot`). The Pi runs a clean **1 IMU (MPU9250) + 2 compass** build; LSM9DS1 2nd-IMU is deferred (verdict above). The historical branch/clone notes below are kept for reference but are **superseded** by the above.
 
 **RCIO (emlid/rcio-dkms):**
 - PR #11 (bugfixes): DONE, reviewed, validated, pushed. Branch: `bugfixes` on `axonbf/rcio-dkms`

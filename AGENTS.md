@@ -72,7 +72,7 @@ sudo ./Build/LED
 
 - C++ standard: C++11 (`-std=c++11`)
 - Target: aarch64 only (Pi 5 native compilation)
-- Sensor status: MPU9250 IMU + MS5611 baro + GPS + 2 compasses (LSM9DS1 magnetometer + AK8963, via `navio2-spi0-cs2` overlay) working. LSM9DS1 accel/gyro reads WHO_AM_I = 0xFF and is skipped (real defect vs. missing chip-select on GPIO25 under investigation)
+- Sensor status: MPU9250 IMU + MS5611 baro + GPS + 2 compasses (LSM9DS1 magnetometer on spidev0.2 + AK8963 via MPU9250, `navio2-spi0-cs2` 3-CS overlay) — all working & calibrated. LSM9DS1 accel/gyro was tested as a **2nd IMU** (2026-07-05): the chip is healthy (raw SPI reads give real ~1g data on spidev0.3, all speeds), but ArduPilot's LSM9DS1 IMU backend never reads it at runtime on Pi 5 / RP1 — its periodic read callback never fires, so the instance streams zeros and, with `INS_ENABLE_MASK=3`, stalls gyro-cal at boot. **Deferred to future work**; reverted to 1 IMU. See docs/TODO.md.
 - Remote target: `ssh pi@<PI5_IP>` (replace with your Pi 5 IP)
 
 ## Current Phase
@@ -80,7 +80,7 @@ sudo ./Build/LED
 - Phase 1-3: Navio2 driver port COMPLETE
 - Phase 4: Hailo AI + Camera + ROS2 integration IN PROGRESS
 - Phase 5: ArduPilot Rover on Pi 5 — **COMPLETE** (GPS 3D lock, IMU calibrated, PWM/ADC/RCIO working, RGB LED, systemd service)
-- Next step: end-to-end boat test with arming; external F9P GPS and Kogger depth sensor integration; clean up Pi 5 home directory; PRs open for review (emlid/rcio-dkms#11, #12, ArduPilot/ardupilot#33647, #33648).
+- Next step: end-to-end boat test with arming; external F9P GPS and Kogger depth sensor integration; clean up Pi 5 home directory; PRs open for review (emlid/rcio-dkms#11, #12, ArduPilot/ardupilot#33655, #33656). #33647/#33648 closed/superseded.
 
 ## Communication Rules
 
