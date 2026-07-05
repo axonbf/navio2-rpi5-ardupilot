@@ -287,6 +287,8 @@ Every external dependency is pinned so a clean SD card reproduces this exact sta
 
 The forks are on **your** GitHub account, so these branches remain available whether or not the upstream PRs are ever approved. Pinning the commit SHA additionally protects against a later force-push of your own branch. The two `rcio-dkms` commits are recorded for provenance only — reproduction builds the module directly from `rcio_source/`.
 
+> **Note:** the `rcio_source/src/` module is byte-identical to the fork branch, but the compass overlay `navio2-spi0-cs2.dts` lives **only** in this repo — it is a Navio2 SPI0 chip-select overlay, not part of the RCIO module, so it is intentionally absent from `axonbf/rcio-dkms`. Always build the RCIO side from `rcio_source/` (Step 4), not from the fork, or the 2nd compass will be missing.
+
 ---
 
 ## Files in this repository
