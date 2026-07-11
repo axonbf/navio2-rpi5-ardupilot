@@ -29,7 +29,7 @@ Provide full Navio2 HAT support on Raspberry Pi 5 for current ArduPilot Rover, u
 
 Additional ArduPilot-specific rule:
 - The target is not only developer examples but also real ArduRover operation with Navio2 peripherals working as ArduPilot expects on a healthy Navio2 HAT.
-- The only accepted hardware exception is the known defective LSM9DS1 on the current board.
+- The only accepted exception is the LSM9DS1 accel/gyro as a 2nd IMU — deferred, and it is an ArduPilot driver limitation on Pi 5/RP1, not a hardware defect (the chip reads valid data over raw SPI; its magnetometer works as the 2nd compass).
 
 ## Design Questions (resolved)
 
@@ -102,9 +102,9 @@ Status:
 ### Current: Navio2 + Pi 5
 
 - Works, all subsystems validated
-- Pi 5 porting cost: 3 kernel-level fixes (drive strength, SPI RX-only, GPIO base), 1 DT overlay, 4 ArduPilot patches
+- Pi 5 porting cost: 3 kernel-level fixes (drive strength, SPI RX-only, GPIO base), 2 DT overlays (RCIO + compass CS), 2 ArduPilot patches (#33655, #33656)
 - No official Emlid Pi 5 support — self-maintained going forward
-- Sensor note: 1 IMU (MPU9250), 1 baro (MS5611), 0 compass (LSM9DS1 hardware defect on this HAT)
+- Sensor note: 1 IMU (MPU9250), 1 baro (MS5611), **2 compasses** (AK8963 + LSM9DS1 mag via `navio2-spi0-cs2`). LSM9DS1 accel/gyro deferred as 2nd IMU (driver-side, not a defect)
 
 ### Alternative considered: Navigator (BlueRobotics)
 
@@ -197,39 +197,35 @@ This is the target architecture for full autonomous marine robotics with AI perc
 - `rcio-pi5-overlay.dts`: separate Pi 5 device tree overlay
 - `navio2-led.dts`: RGB LED device tree overlay
 
-### ArduPilot PR — compatibility analysis (pending review)
+### ArduPilot PR — final analysis (resolved 2026-07-05)
 
-| File | Change | Pi 4 impact | Safe for both? |
+Re-analyzed against **current master** (which migrated Linux boards to a `hwdef.dat` system). This dropped most of the original change set: the sensor config is now declared in `libraries/AP_HAL_Linux/hwdef/navio2/hwdef.dat` upstream, and several patches were validated unnecessary on real hardware. Only two code changes survive, each shipped as its own clean PR against master:
+
+| Change | File | Disposition | PR |
 |---|---|---|---|
-| `boards.py` | `toolchain = 'native'` | Breaks Pi 4 cross-compilation | Pi 4 can override with `--toolchain=arm-linux-gnueabihf` |
-| `AP_Baro_MS5611.cpp` | Skip PROM CRC check | Affects all MS5611 users | Needs navio2 guard |
-| `AP_InertialSensor_config.h` | `ALLOW_NO_SENSORS=1` | Changes behavior for all Linux boards | Needs navio2 guard |
-| `AP_InertialSensor_NONE.h/cpp` | Enable NONE backend for Linux | Safe — opt-in | Yes (PR #33647) |
-| `AP_InertialSensor.cpp` | Warn instead of panic | Changes behavior for all Linux boards | Needs navilo2 guard |
-| `HAL_Linux_Class.cpp` | RCOutput_Sysfs pwmchip 0→6 | Breaks Pi 4 (uses pwmchip0) | Needs board config or runtime detection |
-| `PWM_Sysfs.cpp` | Retry loop for duty_cycle fd | Safe — retry with timeout | Yes (PR #33647) |
-| `board/linux.h` | Default MS5611 I2C bus to 1 | May affect other boards | Needs guard |
+| **C** — RCIO pwmchip index | `AP_HAL_Linux/HAL_Linux_Class.cpp` | **Keep** — runtime detection (scan `/sys/class/pwm` for the 14-ch chip); Pi 4 = pwmchip0, Pi 5 = pwmchip6 | **#33655** |
+| **G** — PWM_Sysfs retry | `AP_HAL_Linux/PWM_Sysfs.cpp` | **Keep** — retry `duty_cycle` open on slow sysfs export | **#33656** |
+| A — native toolchain | `boards.py` | Drop — no code change; pass `--toolchain=native` at configure | — |
+| B — MS5611 I2C bus | `board/linux.h` | Drop — hwdef declares `BARO MS5611 I2C:1:0x77` | — |
+| D — MS5611 CRC skip | `AP_Baro_MS5611.cpp` | Drop — PROM CRC is valid on this HW | — |
+| E — allow-no-sensors + warn | `AP_InertialSensor.cpp`, `_config.h` | Drop — dormant + unsafe global flip; MPU9250 works | — |
+| F — NONE dummy IMU backend | `AP_InertialSensor_NONE.*` | Drop — inert without E | — |
 
-### ArduPilot PR strategy — two PRs with per-subsystem commits
+### ArduPilot PR strategy — two focused PRs against master
 
-Following ArduPilot contribution guidelines (one commit per subsystem, `Subsystem: description` format):
+Each PR is a single self-contained commit, template-formatted, hardware-tested, **no AI co-author trailer** (a maintainer rejected the earlier AI-styled draft):
 
-**PR #33647 — Linux bugfixes** (safe for all Linux boards):
-- `AP_HAL_Linux: PWM_Sysfs: add retry loop for duty_cycle fd open`
-- `AP_InertialSensor: enable NONE backend for HAL_BOARD_LINUX`
+- **PR #33655** — `AP_HAL_Linux: Navio2: detect RCIO pwmchip index at runtime` (change C)
+- **PR #33656** — `AP_HAL_Linux: PWM_Sysfs: retry duty_cycle open on slow export` (change G)
 
-**PR #33648 — Navio2 Pi 5 support** (depends on #33647):
-- `AP_Baro: skip MS5611 PROM CRC check for Navio2`
-- `AP_InertialSensor: allow no sensors and warn instead of panic for Navio2`
-- `AP_HAL_Linux: set MS5611 I2C bus and pwmchip index for Navio2`
-- `Tools: use native toolchain for navio2 board`
+The earlier **#33647 + #33648** drafts (unguarded, based on the 4.6.3 tag) were **closed and superseded** by these two.
 
 ### Steps to publish
 
-1. **RCIO PR #11 (bugfixes)**: [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms
-2. **RCIO PR #12 (Pi 5 support)**: [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays
-3. **ArduPilot PR #33647 (Linux bugfixes)**: [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) — PWM_Sysfs retry, INS NONE backend for Linux
-4. **ArduPilot PR #33648 (Navio2 Pi 5)**: [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) — CRC skip, allow no sensors, pwmchip, native toolchain
+1. **RCIO PR #11 (bugfixes)**: [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms ✅ open
+2. **RCIO PR #12 (Pi 5 support)**: [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays ✅ open
+3. **ArduPilot PR #33655 (change C)**: [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) — RCIO pwmchip runtime detection ✅ open
+4. **ArduPilot PR #33656 (change G)**: [ArduPilot/ardupilot#33656](https://github.com/ArduPilot/ardupilot/pull/33656) — PWM_Sysfs duty_cycle retry ✅ open
 5. **Public repo**: [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) — full setup guide, scripts, overlays, docs
 6. **Post on Emlid community forum** (community.emlid.com) — "Navio2 on Pi 5 — working solution"
 7. **Post on ArduPilot Discourse** (discuss.ardupilot.org) — targeting Linux board users

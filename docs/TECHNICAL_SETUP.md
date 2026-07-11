@@ -14,7 +14,7 @@ Collect the minimum technical requirements and steps to prepare the project.
 
 General rule:
 
-- The setup is only considered correct when Navio2 works as a whole for ArduRover on Pi 5: PWM, outputs, ADC, RC input, onboard GPS, and supported sensors must work through the Linux/ArduPilot stack, except for the known defective LSM9DS1.
+- The setup is only considered correct when Navio2 works as a whole for ArduRover on Pi 5: PWM, outputs, ADC, RC input, onboard GPS, and supported sensors must work through the Linux/ArduPilot stack. The LSM9DS1 accel/gyro (2nd IMU) is a known exception — deferred, and it is an ArduPilot driver limitation on Pi 5/RP1, not a hardware defect (its magnetometer works as the 2nd compass).
 - Do not treat peripheral bypasses as the target state when the hardware is expected to be supported by Navio2 and ArduPilot.
 
 ## Confirmed Environment Inventory
@@ -39,10 +39,11 @@ General rule:
 ## ArduPilot Rover Build and Run
 
 ```bash
-# Build (native aarch64 on Pi 5)
-cd ~/ardupilot
-./waf configure --board navio2 --define=HAL_BARO_MS5611_I2C_BUS=1
-./waf build -j4
+# Build (native aarch64 on Pi 5) — from ArduPilot master
+cd ~/ardupilot-master
+./waf configure --board navio2 --toolchain=native   # 64-bit Pi needs native; navio2 else defaults to 32-bit cross
+./waf rover                                          # reconfigure required after any hwdef.dat edit
+# On old 4.6.x releases also pass --define=HAL_BARO_MS5611_I2C_BUS=1 (master sets it in hwdef)
 
 # Run manually
 sudo ardurover --serial1 udp:<GCS_IP>:14550 \
@@ -59,12 +60,14 @@ sudo nano /etc/default/ardurover
 
 ### Required ArduPilot source patches
 
-| File | Patch | Reason |
-|---|---|---|
-| `AP_Baro_MS5611.cpp` | Skip PROM CRC check in `_read_prom_5611()` and `_read_prom_5637()` | Navio2 MS5611 returns CRC=0 in PROM word 7 |
-| `AP_InertialSensor_config.h` | `AP_INERTIALSENSOR_ALLOW_NO_SENSORS 1` | Allow boot without detected IMU |
-| `AP_InertialSensor_NONE.h/cpp` | Extend NONE backend to `HAL_BOARD_LINUX` | Enable dummy INS for Linux |
-| `AP_InertialSensor.cpp` | Warn instead of panic when no gyro/accel found | Non-fatal fallback for headless boot |
+Against current master, only **two** patches remain (both open PRs on `axonbf/ardupilot`). Sensor config needs **no** patch — master's navio2 hwdef already declares MPU9250 + LSM9DS1 mag + AK8963.
+
+| File | Patch | Reason | PR |
+|---|---|---|---|
+| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (scan `/sys/class/pwm` for the 14-ch RCIO chip) | Pi 4 = pwmchip0, Pi 5 = pwmchip6 (RP1 shifts enumeration) | #33655 |
+| `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry `duty_cycle` open loop | Slow sysfs export after `pwm/export` on Pi 5 | #33656 |
+
+**Dropped patches** (were only for old 4.6.3, validated unnecessary 2026-07-05): MS5611 CRC-skip (PROM CRC is valid on this HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (declared in hwdef).
 
 ### Boat parameter file
 
@@ -74,7 +77,8 @@ sudo nano /etc/default/ardurover
 - `SERIAL1_PROTOCOL 2` (MAVLink telemetry)
 - `SERIAL3_PROTOCOL 5` (GPS on SPI — onboard M8N)
 - `BARO_PROBE_EXT 4`, `BARO_EXT_BUS 1` (MS5611 on I2C bus 1)
-- `COMPASS_ENABLE 0` (LSM9DS1 defective)
+- `COMPASS_ENABLE 1` + `COMPASS_USE/USE2 1` — 2 compasses (AK8963 + LSM9DS1 mag via `navio2-spi0-cs2` overlay), calibrated
+- `INS_ENABLE_MASK 1` — MPU9250 only (LSM9DS1 2nd IMU deferred; see below)
 - `GPS_TYPE 2` (uBlox), `GPS_TYPE2 0`
 - `ARMING_CHECK 1` (enabled after calibration)
 
@@ -168,8 +172,8 @@ sudo ./Build/LED
 
 ## Current Status
 
-- Navio2 driver library and examples validated on Pi 5 hardware (7/8 sensors working; LSM9DS1 = hardware defect)
-- ArduPilot Rover 4.6.3 running on `navio2` board subtype — MS5611 barometer, MPU9250 IMU, M8N GPS (3D lock), 14ch PWM, ADC, RCInput all working
+- Navio2 driver library and examples validated on Pi 5 hardware (LSM9DS1 accel/gyro deferred as 2nd IMU — driver-side, not a hardware defect; its magnetometer works)
+- ArduPilot Rover (master, `V4.8.0-dev`) running on `navio2` board subtype — MS5611 barometer, MPU9250 IMU, M8N GPS (3D lock), **2 compasses (AK8963 + LSM9DS1 mag), calibrated**, 14ch PWM, ADC, RCInput all working
 - ArduPilot auto-starts via systemd (`ardurover.service`) with RCIO loaded by `rcio-startup.sh`
 - I2C + RCIO bus contention: **RESOLVED** — MS5611 works concurrently with RCIO
 - IMU calibration done via QGC, arming checks enabled

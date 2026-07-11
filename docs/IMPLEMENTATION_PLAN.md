@@ -28,7 +28,7 @@ Define the project work plan and record its technical evolution.
 - Tested all example binaries:
   - Barometer (MS5611, I2C): **940 mbar, 32.8°C** ✅
   - AccelGyroMag (MPU9250): **accel/gyro/mag live** ✅
-  - AccelGyroMag (LSM9DS1): **FAIL — hardware defect** (WHO_AM_I=0xFF)
+  - AccelGyroMag (LSM9DS1): accel/gyro **deferred as 2nd IMU** (driver-side on Pi 5/RP1, not a hardware defect — raw SPI reads valid data); magnetometer works as 2nd compass
   - GPS (U-blox M8N): **NMEA data received** ✅
   - LED: **GPIO via libgpiod** ✅
   - ADC: **/sys/kernel/rcio/adc/ch0-5 responding** ✅
@@ -48,7 +48,7 @@ Define the project work plan and record its technical evolution.
 ### Phase 5 — ArduPilot Rover on Pi 5 ✅
 
 #### Completed
-- ArduPilot Rover 4.6.3 built for `navio2` board subtype ✅
+- ArduPilot Rover built for `navio2` board subtype ✅ (originally 4.6.3; **current binary is master `V4.8.0-dev` in `~/ardupilot-master`** — build from there)
 - MS5611 barometer: working on I2C bus 1 with RCIO loaded ✅
 - U-blox M8N GPS: detected via SPI, 11 sats / 3D lock ✅
 - MPU9250 IMU: working, calibrated via QGC ✅
@@ -73,10 +73,10 @@ Define the project work plan and record its technical evolution.
 - [ ] **Publish solution**: fork emlid/rcio + ArduPilot PRs + forum posts
   - RCIO PR #11 (bugfixes): [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms
   - RCIO PR #12 (Pi 5 support): [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays
-  - ArduPilot PR #33647 (Linux bugfixes): [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) — PWM_Sysfs retry, INS NONE backend
-  - ArduPilot PR #33648 (Navio2 Pi 5): [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) — CRC skip, allow no sensors, pwmchip, native toolchain
+  - ArduPilot PR #33655 (RCIO pwmchip runtime detect, change C): [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) — clean, against master, HW-tested
+  - ArduPilot PR #33656 (PWM_Sysfs duty_cycle retry, change G): [ArduPilot/ardupilot#33656](https://github.com/ArduPilot/ardupilot/pull/33656) — clean, against master, HW-tested
   - Public repo: [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) — full setup guide, scripts, overlays, docs
-  - Old PRs closed: emlid/rcio-dkms#10, ArduPilot/ardupilot#33645
+  - Old PRs closed: emlid/rcio-dkms#10, ArduPilot/ardupilot#33645, **#33647 + #33648** (unguarded 4.6.3 drafts, superseded by #33655/#33656)
   - Forum posts: Emlid community + ArduPilot Discourse
 
 #### ArduPilot run commands
@@ -95,14 +95,16 @@ sudo systemctl enable ardurover   # auto-start on boot
 sudo nano /etc/default/ardurover
 ```
 
-#### Required ArduPilot source patches
+#### Required ArduPilot source patches (against master)
 
-| File | Patch | Reason |
-|---|---|---|
-| `AP_Baro_MS5611.cpp` | Skip PROM CRC check in `_read_prom_5611()` and `_read_prom_5637()` | Navio2 MS5611 returns CRC=0 in PROM word 7 |
-| `AP_InertialSensor_config.h` | `AP_INERTIALSENSOR_ALLOW_NO_SENSORS 1` | Allow boot without detected IMU |
-| `AP_InertialSensor_NONE.h/cpp` | Extend NONE backend to `HAL_BOARD_LINUX` | Enable dummy INS for Linux |
-| `AP_InertialSensor.cpp` | Warn instead of panic when no gyro/accel found | Non-fatal fallback for headless boot |
+Only two remain; the old 4.6.3 patch set was dropped as unnecessary (validated 2026-07-05). Sensor config needs no patch — master's navio2 hwdef declares MPU9250 + LSM9DS1 mag + AK8963.
+
+| File | Patch | Reason | PR |
+|---|---|---|---|
+| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection | Pi 4 = pwmchip0, Pi 5 = pwmchip6 | #33655 |
+| `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry `duty_cycle` open | Slow sysfs export on Pi 5 | #33656 |
+
+**Dropped:** MS5611 CRC-skip (PROM CRC valid on HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (in hwdef).
 
 ## Key files on Pi 5
 
@@ -111,7 +113,7 @@ sudo nano /etc/default/ardurover
 | `/etc/systemd/system/ardurover.service` | ArduPilot auto-start service |
 | `/etc/default/ardurover` | ArduPilot configuration (serial ports, telemetry) |
 | `/home/pi/rcio-startup.sh` | RCIO module load + RT throttling disable |
-| `/home/pi/ardurover_work/boat_navio2.parm` | Boat parameter file for Rover 4.6.3 |
+| `/home/pi/ardurover_work/boat_navio2.parm` | Boat parameter file (used with master; `INS_ENABLE_MASK 1`, 2 compasses enabled) |
 | `/usr/local/bin/rp1-spi1-drive.py` | 12 mA drive-strength fix for RP1 SPI1 pins |
 | `/etc/systemd/system/rp1-spi1-drive.service` | Runs at sysinit before RCIO loads |
 | `/etc/modprobe.d/blacklist-rcio.conf` | Prevents RCIO auto-load at boot |

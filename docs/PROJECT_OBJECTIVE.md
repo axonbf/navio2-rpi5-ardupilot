@@ -22,7 +22,7 @@ This includes the full Navio2 HAT surface expected by ArduPilot and by the Navio
 - supported IMU, barometer, and other onboard sensors
 - the Linux-side device access and board configuration ArduPilot expects
 
-The only accepted functional exception is the known defective LSM9DS1 sensor on the current HAT.
+The only accepted functional exception is the LSM9DS1 accel/gyro as a 2nd IMU — deferred, and it is an ArduPilot driver limitation on Pi 5/RP1, not a hardware defect (the chip reads valid data over raw SPI; its magnetometer works as the 2nd compass).
 
 ## Scope
 
@@ -56,7 +56,7 @@ The only accepted functional exception is the known defective LSM9DS1 sensor on 
 
 The project terminates only in one of two ways:
 
-1. **Success**: Navio2 RCIO produces `alive=1` and matching CRC (`0xb9064332`) on Pi 5, ArduRover binds the Navio2 board subtype, and all expected peripherals (except the known-defective LSM9DS1) function.
+1. **Success**: Navio2 RCIO produces `alive=1` and matching CRC (`0xb9064332`) on Pi 5, ArduRover binds the Navio2 board subtype, and all expected peripherals function (the LSM9DS1 accel/gyro is deferred as a 2nd IMU — an ArduPilot driver limitation on Pi 5/RP1, not a hardware defect).
 2. **Documented hardware incompatibility**: after exhausting software-level fixes (kernel SPI driver patches, pinctrl adjustments, clock-domain investigation) and a hardware-level signal capture comparison (Pi 5 vs Pi 4 known-good), produce a written technical conclusion identifying the specific RP1 / DW SPI property that prevents communication with the Navio2 RCIO STM32F103, and stop.
 
 No intermediate "partial workaround" state is an acceptable project outcome.
@@ -68,7 +68,7 @@ No intermediate "partial workaround" state is an acceptable project outcome.
 ## Expected Result
 
 - A build system that produces `libnavio.a` on Pi 5 aarch64 — DONE
-- All 8 C++ example binaries compile and execute without crashes — DONE (7/8 sensors working; LSM9DS1 = hardware defect)
+- All 8 C++ example binaries compile and execute without crashes — DONE (LSM9DS1 accel/gyro deferred as 2nd IMU — driver-side, not a hardware defect; its magnetometer works)
 - Functional validation confirmed via serial output — DONE
 - Hailo-8L M.2 AI accelerator + camera + ROS2 integration in progress
 

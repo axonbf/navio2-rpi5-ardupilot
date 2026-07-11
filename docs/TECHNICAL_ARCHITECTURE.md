@@ -73,8 +73,9 @@ flowchart TB
         H2["MPU9250 IMU<br/>SPI0 CS1"]
         H3["U-blox M8N GPS<br/>SPI0 CS0"]
         H4["MS5611 Barometer<br/>I2C bus 1 addr 0x77"]
-        H5["LSM9DS1 IMU<br/>DEFECTIVE (WHO_AM_I=0xFF)"]
+        H5["LSM9DS1<br/>mag = compass2 (spidev0.2)<br/>accel/gyro = 2nd IMU deferred"]
         H6["RGB LED<br/>GPIO4=R, GPIO6=B, GPIO27=G"]
+        H7["AK8963<br/>compass (via MPU9250)"]
     end
 
     B1 -.->|12 mA drive| H1
@@ -194,10 +195,10 @@ flowchart TB
         D2["Navio2/<br/>PWM, ADC_Navio2<br/>RCInput, RGBled"]
     end
 
-    subgraph ARDU["ArduPilot (navio2 board)"]
-        AR1["AP_Baro_MS5611<br/>CRC skip patch"]
-        AR2["AP_InertialSensor<br/>ALLOW_NO_SENSORS + NONE backend"]
-        AR3["RCOutput_Sysfs<br/>pwmchip6"]
+    subgraph ARDU["ArduPilot (navio2 board, master hwdef)"]
+        AR1["AP_Baro_MS5611<br/>stock CRC (valid on HW)"]
+        AR2["AP_InertialSensor<br/>MPU9250 only (INS_ENABLE_MASK=1)"]
+        AR3["RCOutput_Sysfs<br/>pwmchip runtime detect (PR #33655)"]
         AR4["SPIUARTDriver<br/>serial3 = ublox GPS"]
         AR5["Led_Sysfs<br/>rgb_led0/1/2"]
     end
@@ -206,6 +207,7 @@ flowchart TB
         T1["rcio-pi5-overlay.dts<br/>bcm2712, SPI1"]
         T2["navio2-led.dts<br/>GPIO4/6/27 as gpio-leds"]
         T3["spi1-1cs<br/>cs0_pin=16"]
+        T4["navio2-spi0-cs2.dts<br/>GPIO22 -> spidev0.2 (compass)"]
     end
 
     subgraph SVC["Systemd Services"]
@@ -222,6 +224,7 @@ flowchart TB
   - `spi1-1cs,cs0_pin=16,cs0_spidev=disabled` — enables RP1 SPI1 with CS on GPIO16
   - `rcio-pi5` — binds RCIO driver to SPI1 device (bcm2712 compatible)
   - `navio2-led` — creates `/sys/class/leds/rgb_led{0,1,2}` from GPIO4/6/27
+  - `navio2-spi0-cs2` — adds a 3rd SPI0 chip-select on GPIO22 → `/dev/spidev0.2` for the LSM9DS1 magnetometer (Pi 5's SPI0 exposes only 2 CS by default; without it, enabling the compass panics)
 - **Blacklist**: `/etc/modprobe.d/blacklist-rcio.conf` prevents RCIO auto-load at boot
 
 ### 2. RP1 Drive Strength Fix
@@ -256,10 +259,12 @@ flowchart TB
 
 | Sensor | Bus | Device | Status |
 |---|---|---|---|
-| MS5611 barometer | I2C bus 1 | `/dev/i2c-1` addr 0x77 | Working (CRC skip patch) |
-| MPU9250 IMU | SPI0 CS1 | `/dev/spidev0.1` | Working, calibrated via QGC |
+| MS5611 barometer | I2C bus 1 | `/dev/i2c-1` addr 0x77 | Working (stock CRC — valid on this HW) |
+| MPU9250 IMU | SPI0 CS1 | `/dev/spidev0.1` | Working, calibrated via QGC — sole IMU |
 | U-blox M8N GPS | SPI0 CS0 | `/dev/spidev0.0` | Working, 3D lock 11+ sats |
-| LSM9DS1 IMU | SPI0 CS2/CS3 | — | **Hardware defect** (WHO_AM_I=0xFF), auto-skipped |
+| AK8963 compass | SPI0 CS1 (via MPU9250) | `/dev/spidev0.1` | Working, calibrated (compass) |
+| LSM9DS1 magnetometer | SPI0 CS2 | `/dev/spidev0.2` (`navio2-spi0-cs2` overlay) | Working, calibrated (2nd compass) |
+| LSM9DS1 accel/gyro | SPI0 CS3 | — | 2nd IMU **deferred** — chip healthy, ArduPilot driver never reads it on Pi 5/RP1 (not a defect) |
 | RCIO ADC | SPI1 | `/sys/kernel/rcio/adc/ch0-5` | Working |
 | RCIO RCInput | SPI1 | `/sys/kernel/rcio/rcin/ch0-15` | Working |
 | RCIO PWM | SPI1 | `/sys/class/pwm/pwmchip6` 14ch | Working |
@@ -267,12 +272,11 @@ flowchart TB
 
 ### 6. ArduPilot Rover Integration
 
-- **Binary**: `~/ardupilot/build/navio2/bin/ardurover` (navio2 board subtype, aarch64 native)
-- **Source patches** (4 files, applied to ArduPilot 4.6.3):
-  - `AP_Baro_MS5611.cpp` — skip PROM CRC check (Navio2 MS5611 returns CRC=0)
-  - `AP_InertialSensor_config.h` — `AP_INERTIALSENSOR_ALLOW_NO_SENSORS 1`
-  - `AP_InertialSensor_NONE.h/cpp` — enable NONE backend for Linux
-  - `AP_InertialSensor.cpp` — warn instead of panic on missing IMU
+- **Binary**: `~/ardupilot-master/build/navio2/bin/ardurover` (navio2 board subtype, aarch64 native, built from ArduPilot master)
+- **Source patches** (2 files — the rest were dropped as unnecessary, validated 2026-07-05):
+  - `AP_HAL_Linux/HAL_Linux_Class.cpp` — runtime pwmchip detection (Pi 4 → pwmchip0, Pi 5 → pwmchip6) — **PR #33655**
+  - `AP_HAL_Linux/PWM_Sysfs.cpp` — retry duty_cycle open on slow sysfs export — **PR #33656**
+  - Dropped (were needed only on old 4.6.3, now proven unnecessary): MS5611 CRC-skip (PROM CRC is valid on this HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (declared in hwdef). Sensor config needs **no** patch — upstream master hwdef already declares MPU9250 + LSM9DS1 mag + AK8963.
 - **Systemd service**: `/etc/systemd/system/ardurover.service` with `ExecStartPre=/home/pi/rcio-startup.sh`
 - **Config**: `/etc/default/ardurover` (serial ports, telemetry IP, `--serialN` syntax)
 - **Params**: `~/ardurover_work/boat_navio2.parm`
@@ -312,6 +316,8 @@ flowchart TB
 |---|---|---|---|
 | [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) | emlid/rcio-dkms | Open | Bugfixes: error path, PWM API, probe abort, debug messages |
 | [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 platform support (dynamic GPIO base, module_param CS delays) |
-| [ArduPilot/ardupilot#33647](https://github.com/ArduPilot/ardupilot/pull/33647) | ArduPilot/ardupilot | Open | Linux bugfixes: PWM_Sysfs retry, INS NONE backend for Linux |
-| [ArduPilot/ardupilot#33648](https://github.com/ArduPilot/ardupilot/pull/33648) | ArduPilot/ardupilot | Open | Navio2 Pi 5: CRC skip, allow no sensors, pwmchip, native toolchain |
+| [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) | ArduPilot/ardupilot | Open | Navio2 RCIO pwmchip runtime detection (change C) — clean, against master, HW-tested |
+| [ArduPilot/ardupilot#33656](https://github.com/ArduPilot/ardupilot/pull/33656) | ArduPilot/ardupilot | Open | PWM_Sysfs duty_cycle retry on slow export (change G) — clean, against master, HW-tested |
+| ~~ArduPilot/ardupilot#33647~~ | ArduPilot/ardupilot | Closed | Unguarded draft (based on 4.6.3) — superseded by #33656 |
+| ~~ArduPilot/ardupilot#33648~~ | ArduPilot/ardupilot | Closed | Unguarded draft (based on 4.6.3) — superseded by #33655 |
 | [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) | Public repo | Live | Full setup guide, scripts, overlays, documentation |

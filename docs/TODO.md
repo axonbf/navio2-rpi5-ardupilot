@@ -23,26 +23,17 @@
 
 #### 10 — Publish: ArduPilot PRs + RCIO PRs + forum posts
 
+**Resolved 2026-07-05 (supersedes the old #33647/#33648 plan below).** Re-analysis against current master (hwdef system) dropped most changes; only C + G survive, each as a clean PR against master. Full detail in the A–G issue map further down.
+
 | Sub-task | Status | Details |
 |---|---|---|
-| 10a. RCIO PR #11 (bugfixes) | ✅ Done | Reviewed, EXPORT_SYMBOL fixed, pushed |
-| 10b. RCIO PR #12 (Pi 5 support) | ✅ Done | Dynamic GPIO base (-1), module_param CS delays, pushed |
-| 10c. ArduPilot PR #33647 (Linux bugfixes) | ✅ Validated & pushed | PWM_Sysfs retry + INS NONE backend. Guard: `#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 \|\| AP_INERTIALSENSOR_ALLOW_NO_SENSORS`. Built and tested on Pi 5. |
-| 10d. ArduPilot PR #33648 (Navio2 Pi 5) | ⚠️ **Needs guards** | Created but code is NOT guarded — see conflict table below |
+| 10a. RCIO PR #11 (bugfixes) | ✅ Open | Reviewed, EXPORT_SYMBOL fixed, pushed |
+| 10b. RCIO PR #12 (Pi 5 support) | ✅ Open | Dynamic GPIO base (-1), module_param CS delays, pushed |
+| 10c. ArduPilot PR #33655 (change C — pwmchip) | ✅ Open | Runtime pwmchip detection, against master, HW-tested, no AI trailer |
+| 10d. ArduPilot PR #33656 (change G — PWM_Sysfs) | ✅ Open | duty_cycle retry on slow export, against master, HW-tested |
 | 10e. Forum posts | ❌ Not started | Emlid community + ArduPilot Discourse |
 
-**10d — ArduPilot PR #33648 conflict analysis (must fix before review):**
-
-| File | Change | Pi 4 impact | Issue | Fix needed |
-|---|---|---|---|---|
-| `boards.py` | `toolchain = 'native'` | Breaks Pi 4 cross-compilation | Pi 4 users may cross-compile with arm-linux-gnueabihf | Add note in PR or make configurable |
-| `HAL_Linux_Class.cpp` | `RCOutput_Sysfs(6, ...)` | Breaks Pi 4 (uses pwmchip0) | Hardcoded pwmchip index | Guard with `#if` or make configurable |
-| `board/linux.h` | `HAL_BARO_MS5611_I2C_BUS 1` | May affect other Linux boards | Unguarded define | Guard with `#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2` |
-| `AP_Baro_MS5611.cpp` | Skip PROM CRC check | Affects all MS5611 users | Not Navio2-specific | Guard with `#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2` |
-| `AP_InertialSensor_config.h` | `ALLOW_NO_SENSORS=1` | Changes behavior for all Linux boards | Not Navio2-specific | Guard or move to board config |
-| `AP_InertialSensor.cpp` | Warn instead of panic | Changes behavior for all Linux boards | Not Navio2-specific | Guard with `#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2` |
-| `AP_InertialSensor_NONE.h/cpp` | Enable NONE backend | Safe — opt-in | OK | In PR #33647, validated |
-| `PWM_Sysfs.cpp` | Retry loop for duty_cycle fd | Safe — retry with timeout | OK | In PR #33647, validated |
+The earlier **#33647 + #33648** drafts were **closed** — unguarded, based on the 4.6.3 tag, and folded the now-dropped changes (A/B/D/E/F). Their old per-file conflict analysis no longer applies: A/B (config in hwdef), D (CRC valid on HW), E/F (dormant, MPU9250 works) were all dropped, and C is now runtime-detected (no guard needed). See the A–G issue map for the disposition of each.
 
 ### Revised issue map — updated 2026-07-05 (current master uses hwdef for Linux boards)
 
@@ -129,33 +120,27 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 - PR #11 (bugfixes): DONE, reviewed, validated, pushed. Branch: `bugfixes` on `axonbf/rcio-dkms`
 - PR #12 (Pi 5 support): DONE, reviewed, validated, pushed. Branch: `pi5-support-v2` on `axonbf/rcio-dkms`
 
-**ArduPilot (ArduPilot/ardupilot):**
-- PR #33647 (Linux bugfixes): DONE, validated on Pi 5, pushed. Branch: `linux-bugfixes` on `axonbf/ardupilot`
-  - Commit 1: `AP_HAL_Linux: PWM_Sysfs: add retry loop for duty_cycle fd open`
-  - Commit 2: `AP_InertialSensor: enable NONE backend when ALLOW_NO_SENSORS is set`
-  - Guard: `#if CONFIG_HAL_BOARD == HAL_BOARD_ESP32 || AP_INERTIALSENSOR_ALLOW_NO_SENSORS`
-  - Built and tested on Pi 5 — boots successfully
-- PR #33648 (Navio2 Pi 5): CREATED but **NOT GUARDED** — this is the immediate next task. Branch: `navio2-pi5-support` on `axonbf/ardupilot`
-  - 4 commits, 6 files need Pi 4 compatibility guards
-  - See conflict table above
+**ArduPilot (ArduPilot/ardupilot) — against master, each a single clean commit:**
+- PR #33655 (change C — RCIO pwmchip runtime detect): OPEN, HW-tested. Branch `pr-navio2-pwmchip` on `axonbf/ardupilot` @ `84182ac`.
+- PR #33656 (change G — PWM_Sysfs duty_cycle retry): OPEN, HW-tested. Branch `pr-pwm-sysfs-retry` on `axonbf/ardupilot` @ `15967de`.
+- Old `#33647`/`#33648` (branches `linux-bugfixes`, `navio2-pi5-support`) are **closed/superseded** — do not use.
 
-### How to get the working branches
+### How to get the working branches (pinned)
 
-The `/tmp/` directories from the previous session will NOT persist. Clone from the forks:
+Sensors need no patch — master's navio2 hwdef declares MPU9250 + LSM9DS1 mag + AK8963. Only the two ArduPilot commits are needed; cherry-pick them by SHA onto a fresh master clone (full recipe in `QUICK_START.md` Step 8):
 
 ```bash
-# ArduPilot fork
-git clone https://github.com/axonbf/ardupilot.git /tmp/ardupilot_navio2_pi5
-cd /tmp/ardupilot_navio2_pi5
-git fetch origin tag Rover-4.6.3 --depth=1
-git checkout linux-bugfixes    # PR #33647 (done)
-git checkout navio2-pi5-support # PR #33648 (needs guards)
+# ArduPilot: clone master, add the fork, cherry-pick the two pinned commits
+git clone https://github.com/ArduPilot/ardupilot.git ~/ardupilot-master
+cd ~/ardupilot-master
+git remote add axonbf https://github.com/axonbf/ardupilot.git
+git fetch axonbf pr-navio2-pwmchip pr-pwm-sysfs-retry
+git cherry-pick 84182acccb82dabbb771afcb30d400bc742282d9   # C — PR #33655
+git cherry-pick 15967de4b9fdde3d7b99bfa533e6c22fe701c66e   # G — PR #33656
+git submodule update --init --recursive
 
-# RCIO fork
-git clone https://github.com/axonbf/rcio-dkms.git /tmp/rcio_navio2_pi5
-cd /tmp/rcio_navio2_pi5
-git checkout bugfixes       # PR #11 (done)
-git checkout pi5-support-v2 # PR #12 (done)
+# RCIO module + overlays are vendored in THIS repo's rcio_source/ (build per QUICK_START Step 4).
+# The rcio-dkms fork branches (bugfixes @ e2d2c36, pi5-support-v2 @ 3af18f3) are provenance only.
 ```
 
 ### Pi 5 state (updated 2026-07-05)
@@ -176,7 +161,7 @@ git checkout pi5-support-v2 # PR #12 (done)
 - **Always ask before applying changes to the Pi 5.** Do not push files, modify source, or rebuild without explicit user approval.
 - **Keep docs up-to-date** before moving to the next task.
 - **Communication rules** in `AGENTS.md`: no post-hoc rationalization, no telling user what they want to hear, transparent about method differences.
-- **PR #33648 is the immediate next task** — 6 files need Pi 4 compatibility guards.
+- **No immediate ArduPilot PR task** — #33655 + #33656 are open and awaiting upstream review; nothing to push. Next real work is forum posts / QGC calibration / cleanup (see Pending).
 
 ### Access info
 
