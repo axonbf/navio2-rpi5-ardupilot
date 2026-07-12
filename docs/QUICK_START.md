@@ -223,9 +223,14 @@ The earlier MS5611 CRC-skip and INS "allow no sensors" patches are **no longer u
 
 ---
 
-## Step 9 — Create systemd service for ArduRover
+## Step 9 — Install boat parameters + create systemd service
+
+Install the parameter defaults **first** — the service loads them via `--defaults`. `src/boat_navio2.parm` has the **compass enabled** (`COMPASS_ENABLE 1`, `COMPASS_USE/USE2 1`); without it QGC shows all compasses "Not installed".
 
 ```bash
+mkdir -p /home/pi/ardurover_work
+cp src/boat_navio2.parm /home/pi/ardurover_work/boat_navio2.parm
+
 sudo ln -sf /home/pi/ardupilot/build/navio2/bin/ardurover /usr/bin/ardurover
 
 sudo tee /etc/default/ardurover > /dev/null << 'EOF'
@@ -271,6 +276,31 @@ sudo ardurover --serial1 udp:<GCS_IP>:14550 --defaults ~/ardurover_work/boat_nav
 sudo systemctl start ardurover
 sudo systemctl stop ardurover
 ```
+
+---
+
+## Step 11 — First boot: calibrate in QGC
+
+On a fresh card the sensors are **detected but not calibrated**. In QGroundControl → Vehicle Setup → Sensors, run all three:
+
+1. **Compass** — both `AK8963` + `LSM9DS1` mag should be listed. Calibrate. (If none are listed, see Troubleshooting.)
+2. **Accelerometer / Level** — the parm's `AHRS_TRIM_*` come from a different board; recalibrate on this one.
+3. **Radio** — calibrate the transmitter (the Radio panel shows red until done).
+
+`ARMING_CHECK 1` will report prearm failures ("Compass not calibrated", etc.) until all three are complete — that is **expected**; do not disable arming checks to hide it.
+
+---
+
+## Troubleshooting
+
+**QGC shows all compasses "Not installed" (no device names) — and compass calibration offers nothing to select.**
+This is a **parameter**, not a hardware, SPI, or sensor-frequency fault. `COMPASS_ENABLE` must be `1` (with `COMPASS_USE`/`COMPASS_USE2` = 1). It is correct in `src/boat_navio2.parm`; a card seeded from an older parm may have `0`. Fix: set `COMPASS_ENABLE 1` (QGC Parameters, or the parm file) and **reboot** so ArduPilot re-probes — the compasses then appear and you can calibrate.
+- ⚠️ **Do NOT change sensor SPI frequencies or the hwdef to "fix" a missing compass.** The frequencies are correct; the symptom is purely the enable flag. Chasing frequencies is a dead end.
+- Confirm the hardware side is fine (it already is in this repo): `/dev/spidev0.2` exists (the `navio2-spi0-cs2` overlay loaded) and the ArduPilot `hwdef` declares `COMPASS LSM9DS1` + `COMPASS AK8963:probe_mpu9250`.
+
+**Only AK8963 appears; LSM9DS1 mag missing.** `/dev/spidev0.2` is absent → the `navio2-spi0-cs2` overlay didn't load. Check `config.txt` and `/boot/firmware/overlays/`, then rebuild it (Step 2).
+
+**RCIO `status/crc` prints `0xffffffffb9064332` instead of `0xb9064332`.** Cosmetic sign-extension, already fixed in this repo's `rcio_source`; the low 32 bits are the real CRC and match. Rebuild the RCIO module from `rcio_source/`.
 
 ---
 

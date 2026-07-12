@@ -920,3 +920,18 @@ Pushed the 6.12 fixes + CRC fix + pwm cleanup to `axonbf/rcio-dkms` branch `pi5-
 #### Note on the git identity flip
 
 The gh/git identity in this workspace switched to the AGCO corporate account mid-work (caused commit `5b77d93` misattribution and a push 403). Claude set the repo-local `user.email` to `mail@benjaminfernandez.info`. Worth checking what switched it.
+
+### Session 16 (2026-07-12) — Clean-card compass regression: root cause = disabled param, not hardware
+
+- Agent: Claude Code (Opus 4.8)
+- Symptom: on the fresh opencode-built card, QGC showed all compasses "Not installed" (even AK8963, which rides on the MPU9250 and needs no overlay); compass calibration offered nothing to select. The old card showed 2 compasses.
+
+#### Root cause
+`boat_navio2.parm` had `COMPASS_ENABLE 0` / `COMPASS_USE* 0` — the compass was switched **off** in parameters. Everything hardware-side was correct: `/dev/spidev0.2` present (navio2-spi0-cs2 overlay loaded), hwdef declares both `COMPASS LSM9DS1` + `COMPASS AK8963:probe_mpu9250`, MPU9250 + MS5611 working. The disabled param came from the repo's tracked `src/boat_navio2.parm`, which still held the old pre-fix "LSM9DS1 defective" defaults. During the earlier doc sync only `TECHNICAL_SETUP.md` was corrected to `COMPASS_ENABLE 1` — the **parm artifact itself was never fixed** (fixed-the-doc-not-the-artifact). opencode faithfully reproduced the disabled compass.
+
+#### Fix
+- `src/boat_navio2.parm`: `COMPASS_ENABLE/USE/USE2/USE3` → 1 (+ inline comment warning). User set the params in QGC, rebooted, and calibrated both compasses successfully.
+- QUICK_START: added Step 9 parm-install (`cp src/boat_navio2.parm ~/ardurover_work/`), a Step 11 first-boot calibration list (compass/accel/radio), and a Troubleshooting section.
+
+#### Lesson for future agents (opencode et al.)
+"Compass Not installed" on this board is a **parameter** issue (`COMPASS_ENABLE`), NOT a hardware/SPI/sensor-frequency fault. **Do not change sensor SPI frequencies or hwdef to chase a missing compass** — the frequencies are correct; that is a dead end. (opencode started to change sensor frequencies here; the user stopped it.) Enable the param and reboot.

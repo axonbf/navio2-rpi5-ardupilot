@@ -48,11 +48,14 @@ AHRS_GPS_USE 1
 # IMU
 INS_ENABLE_MASK 1
 
-# Compass
-COMPASS_ENABLE 0
-COMPASS_USE 0
-COMPASS_USE2 0
-COMPASS_USE3 0
+# Compass — MUST be enabled. 2 compasses on Navio2: AK8963 (via MPU9250) +
+# LSM9DS1 magnetometer (needs the navio2-spi0-cs2 overlay -> /dev/spidev0.2).
+# If QGC shows compasses "Not installed", it is THIS param, not a hardware/SPI
+# fault — do NOT change sensor SPI frequencies. See QUICK_START troubleshooting.
+COMPASS_ENABLE 1
+COMPASS_USE 1
+COMPASS_USE2 1
+COMPASS_USE3 1
 
 # Arming
 ARMING_CHECK 1
