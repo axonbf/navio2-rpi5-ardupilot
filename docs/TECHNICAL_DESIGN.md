@@ -203,7 +203,7 @@ Re-analyzed against **current master** (which migrated Linux boards to a `hwdef.
 
 | Change | File | Disposition | PR |
 |---|---|---|---|
-| **C** — RCIO pwmchip index | `AP_HAL_Linux/HAL_Linux_Class.cpp` | **Keep** — runtime detection (scan `/sys/class/pwm` for the 14-ch chip); Pi 4 = pwmchip0, Pi 5 = pwmchip6 | **#33655** |
+| **C** — RCIO pwmchip index | `AP_HAL_Linux/HAL_Linux_Class.cpp` | **Keep** — runtime detection (scan `/sys/class/pwm` for the 14-ch chip); Pi 4 = pwmchip0; Pi 5 varies (pwmchip6 on k6.6, pwmchip1 on 6.12) | **#33655** |
 | **G** — PWM_Sysfs retry | `AP_HAL_Linux/PWM_Sysfs.cpp` | **Keep** — retry `duty_cycle` open on slow sysfs export | **#33656** |
 | A — native toolchain | `boards.py` | Drop — no code change; pass `--toolchain=native` at configure | — |
 | B — MS5611 I2C bus | `board/linux.h` | Drop — hwdef declares `BARO MS5611 I2C:1:0x77` | — |

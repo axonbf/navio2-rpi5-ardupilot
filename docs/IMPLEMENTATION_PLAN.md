@@ -102,7 +102,7 @@ Only two remain; the old 4.6.3 patch set was dropped as unnecessary (validated 2
 
 | File | Patch | Reason | PR |
 |---|---|---|---|
-| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection | Pi 4 = pwmchip0, Pi 5 = pwmchip6 | #33655 |
+| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection | Pi 4 = pwmchip0; Pi 5 varies (pwmchip6 on k6.6, pwmchip1 on 6.12) | #33655 |
 | `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry `duty_cycle` open | Slow sysfs export on Pi 5 | #33656 |
 
 **Dropped:** MS5611 CRC-skip (PROM CRC valid on HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (in hwdef).

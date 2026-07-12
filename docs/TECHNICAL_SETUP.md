@@ -64,7 +64,7 @@ Against current master, only **two** patches remain (both open PRs on `axonbf/ar
 
 | File | Patch | Reason | PR |
 |---|---|---|---|
-| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (scan `/sys/class/pwm` for the 14-ch RCIO chip) | Pi 4 = pwmchip0, Pi 5 = pwmchip6 (RP1 shifts enumeration) | #33655 |
+| `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (scan `/sys/class/pwm` for the 14-ch RCIO chip) | Pi 4 = pwmchip0; Pi 5 index **varies** (pwmchip6 on kernel 6.6, pwmchip1 on 6.12) — RP1 enumeration shifts, so detect at runtime | #33655 |
 | `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry `duty_cycle` open loop | Slow sysfs export after `pwm/export` on Pi 5 | #33656 |
 
 **Dropped patches** (were only for old 4.6.3, validated unnecessary 2026-07-05): MS5611 CRC-skip (PROM CRC is valid on this HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (declared in hwdef).

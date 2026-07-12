@@ -200,7 +200,7 @@ git clone https://github.com/ArduPilot/ardupilot.git ~/ardupilot
 cd ~/ardupilot
 git remote add axonbf https://github.com/axonbf/ardupilot.git
 git fetch axonbf pr-navio2-pwmchip pr-pwm-sysfs-retry
-git cherry-pick 84182acccb82dabbb771afcb30d400bc742282d9   # C: RCIO pwmchip runtime detect (Pi4→pwmchip0, Pi5→pwmchip6) — PR #33655
+git cherry-pick 84182acccb82dabbb771afcb30d400bc742282d9   # C: RCIO pwmchip runtime detect (Pi4→pwmchip0; Pi5 varies: pwmchip6 on k6.6, pwmchip1 on 6.12) — PR #33655
 git cherry-pick 15967de4b9fdde3d7b99bfa533e6c22fe701c66e   # G: PWM_Sysfs duty_cycle retry on slow sysfs export      — PR #33656
 git submodule update --init --recursive
 ```
@@ -289,7 +289,7 @@ sudo systemctl stop ardurover
 | RGB LED device tree | `rcio_source/navio2-led.dts` | Creates `/sys/class/leds/rgb_led0/1/2` for ArduPilot status LED |
 | RCIO blacklisted at boot | `/etc/modprobe.d/blacklist-rcio.conf` | Prevents I2C contention; loaded by rcio-startup.sh |
 | RT throttling disabled | `rcio-startup.sh` sets `sched_rt_runtime_us=-1` | Standard for ArduPilot on Linux |
-| ArduPilot RCIO pwmchip | `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (Pi 4 = 0, Pi 5 = 6) — PR #33655 |
+| ArduPilot RCIO pwmchip | `AP_HAL_Linux/HAL_Linux_Class.cpp` | Runtime pwmchip detection (Pi 4 = 0; Pi 5 index varies by kernel — 6 on k6.6, 1 on k6.12 — detected at runtime) — PR #33655 |
 | ArduPilot PWM_Sysfs retry | `AP_HAL_Linux/PWM_Sysfs.cpp` | Retry duty_cycle open for slow sysfs export — PR #33656 |
 
 ### Pinned commits (reproducibility)

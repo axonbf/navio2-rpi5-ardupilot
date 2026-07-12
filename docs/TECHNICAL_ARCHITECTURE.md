@@ -146,7 +146,7 @@ flowchart LR
         K1["/dev/i2c-1<br/>I2C bus 1"]
         K2["/dev/spidev0.0<br/>SPI0 CS0"]
         K3["/dev/spidev0.1<br/>SPI0 CS1"]
-        K4["/sys/class/pwm/pwmchip6<br/>RCIO PWM 14ch"]
+        K4["/sys/class/pwm/pwmchipN<br/>RCIO PWM 14ch (index varies)"]
         K5["/sys/kernel/rcio/<br/>ADC + RCInput sysfs"]
         K6["/sys/class/leds/<br/>rgb_led0/1/2"]
     end
@@ -270,14 +270,14 @@ flowchart TB
 | LSM9DS1 accel/gyro | SPI0 CS3 | — | 2nd IMU **deferred** — chip healthy, ArduPilot driver never reads it on Pi 5/RP1 (not a defect) |
 | RCIO ADC | SPI1 | `/sys/kernel/rcio/adc/ch0-5` | Working |
 | RCIO RCInput | SPI1 | `/sys/kernel/rcio/rcin/ch0-15` | Working |
-| RCIO PWM | SPI1 | `/sys/class/pwm/pwmchip6` 14ch | Working |
+| RCIO PWM | SPI1 | `/sys/class/pwm/pwmchipN` 14ch (index varies: 6 on k6.6, 1 on k6.12 — runtime-detected) | Working |
 | RGB LED | GPIO | `/sys/class/leds/rgb_led{0,1,2}` | Working |
 
 ### 6. ArduPilot Rover Integration
 
 - **Binary**: `~/ardupilot-master/build/navio2/bin/ardurover` (navio2 board subtype, aarch64 native, built from ArduPilot master)
 - **Source patches** (2 files — the rest were dropped as unnecessary, validated 2026-07-05):
-  - `AP_HAL_Linux/HAL_Linux_Class.cpp` — runtime pwmchip detection (Pi 4 → pwmchip0, Pi 5 → pwmchip6) — **PR #33655**
+  - `AP_HAL_Linux/HAL_Linux_Class.cpp` — runtime pwmchip detection (Pi 4 → pwmchip0; Pi 5 varies — pwmchip6 on k6.6, pwmchip1 on 6.12) — **PR #33655**
   - `AP_HAL_Linux/PWM_Sysfs.cpp` — retry duty_cycle open on slow sysfs export — **PR #33656**
   - Dropped (were needed only on old 4.6.3, now proven unnecessary): MS5611 CRC-skip (PROM CRC is valid on this HW), `ALLOW_NO_SENSORS` + NONE backend + panic→warn (MPU9250 works), `HAL_BARO_MS5611_I2C_BUS` (declared in hwdef). Sensor config needs **no** patch — upstream master hwdef already declares MPU9250 + LSM9DS1 mag + AK8963.
 - **Systemd service**: `/etc/systemd/system/ardurover.service` with `ExecStartPre=/home/pi/rcio-startup.sh`
