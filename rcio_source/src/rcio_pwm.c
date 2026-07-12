@@ -84,15 +84,6 @@ static const struct pwm_ops rcio_pwm_ops = {
 #endif
 };
 
-static inline struct rcio_pwm *to_rcio_pwm(struct pwm_chip *chip)
-{
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,12,0)
-    return (struct rcio_pwm *)pwmchip_get_drvdata(chip);
-#else
-    return container_of(chip, struct rcio_pwm, chip);
-#endif
-}
-
 static u16 values[RCIO_PWM_MAX_CHANNELS] = {0};
 
 static u16 alt_frequency = 50;
@@ -310,9 +301,13 @@ int rcio_pwm_probe(struct rcio_state *state)
     }
 
     ret =  rcio_hardware_init(state);
+    if (ret < 0) {
+        rcio_pwm_err(pwm->state->adapter->dev, "PWM hardware init failed: %d\n", ret);
+        return ret;
+    }
 
     rcio_pwm_warn(pwm->state->adapter->dev, "PWM probe success\n");
-    
+
     return ret;
 }
 
