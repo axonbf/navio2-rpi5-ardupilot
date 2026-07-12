@@ -85,6 +85,8 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 | 11 | Install ROS2 Jazzy + ArduPilot DDS | Medium | Install ROS2, configure AP_DDS, micro-ros-agent |
 | 12 | Hailo-8L + ROS2 inference pipeline | Medium | Semantic segmentation model, ROS2 camera topic, Hailo inference |
 | 13 | Evaluate Navigator (BlueRobotics) | Low | Research only — Pi 4 only, unknown Pi 5 porting feasibility |
+| 17 | Update RCIO PRs with kernel 6.12 fixes | Medium | Add `pwmchip_alloc`/`gpiochip_add_data`/`pwm_ops.owner` guards to PR #11/#12 |
+| 18 | Audit by Claude (second opinion) | Medium | User requested Claude to audit the kernel 6.12 fixes and overall work |
 
 ## Next Steps (immediate priority)
 

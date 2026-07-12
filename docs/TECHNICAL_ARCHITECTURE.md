@@ -237,11 +237,14 @@ flowchart TB
 ### 3. RCIO Kernel Module
 
 - **Components**: `rcio_core.ko` + `rcio_spi.ko` (built from emlid/rcio-dkms with Pi 5 patches)
-- **Pi 5 specific changes** (all platform-guarded):
+- **Pi 5 specific changes** (all platform-guarded, build on both kernel 6.6 and 6.12):
   - `rcio_gpio.c`: `GPIO_CHIP_OFFSET = -1` (dynamic allocation — kernel picks free base, no platform guards needed)
+  - `rcio_gpio.c`: `gpiochip_add_data()` for kernel 6.12+ (old `gpiochip_add()` removed)
   - `rcio_spi.c`: CS delays via `module_param()` (defaults to 0; Pi 5 passes values via `insmod`)
   - `rcio_spi.c`: `remove` return type `void` on kernel 6.2+ (`LINUX_VERSION_CODE` guard)
   - `rcio_pwm.c`: `.apply/.get_state` API (old `.enable/.disable/.config` removed in kernel 5.13+)
+  - `rcio_pwm.c`: `pwmchip_alloc()`/`pwmchip_put()` for kernel 6.12+ (embedded `struct device` + flexible `pwms[]` array). `struct rcio_pwm` conditionally drops `pwm_chip` member. `to_rcio_pwm()` uses `pwmchip_get_drvdata()`.
+  - `rcio_pwm.c`: `pwm_ops.owner` removed for 6.12+ (moved to `pwm_chip.owner`)
   - `rcio-pi5-overlay.dts`: separate overlay for Pi 5 (bcm2712)
 - **Loaded by**: `/home/pi/rcio-startup.sh` (also disables RT throttling)
 - **Verified state**: `alive=1`, `board_name=navio2`, `crc=0xb9064332`

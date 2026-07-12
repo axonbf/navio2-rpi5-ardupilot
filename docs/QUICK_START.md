@@ -110,6 +110,23 @@ sudo cp *.ko /home/pi/rcio_build/
 The `rcio-pi5-overlay.dts` is a separate overlay for Pi 5 (bcm2712); the original `rcio-overlay.dts` (bcm2709) is kept for Pi 4.
 CS delays are passed as module parameters at load time (see Step 6).
 
+### Kernel version compatibility
+
+The RCIO source in this repo includes `LINUX_VERSION_CODE` guards for both kernels:
+
+| Kernel | Bookworm image date | RCIO build | Notes |
+|---|---|---|---|
+| 6.6.x (`6.6.51+rpt-rpi-2712`) | Oct 2024 — early 2025 | Builds out of the box | Original tested kernel |
+| 6.12.x (`6.12.93+rpt-rpi-2712`) | Mid 2025+ | Builds with included 6.12 fixes | 3 API changes handled (see below) |
+
+**Kernel 6.12 API changes handled in the source:**
+
+1. `rcio_gpio.c`: `gpiochip_add()` → `gpiochip_add_data(gc, NULL)` (old API removed)
+2. `rcio_pwm.c`: `pwm_ops.owner` removed → moved to `pwm_chip.owner` (guarded by `LINUX_VERSION_CODE`)
+3. `rcio_pwm.c`: `pwm_chip.dev` changed from `struct device *` to embedded `struct device` + flexible array `pwms[]` → uses `pwmchip_alloc()` / `pwmchip_put()` for 6.12+, `kzalloc()` / `kfree()` for older. `struct rcio_pwm` conditionally drops `pwm_chip` member for 6.12+. `to_rcio_pwm()` uses `pwmchip_get_drvdata()` for 6.12+, `container_of()` for older.
+
+All guards are compile-time (`#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,12,0)`) — the same source builds on both kernels.
+
 ---
 
 ## Step 5 — Blacklist RCIO for safe boot
@@ -266,6 +283,7 @@ sudo systemctl stop ardurover
 | RCIO SPI CS delays | `rcio_source/src/rcio_spi.c` (`module_param`) | Pi 5 RP1 needs 50µs CS setup/hold; passed via `insmod` parameters |
 | RCIO PWM API migration | `rcio_source/src/rcio_pwm.c` | `.apply/.get_state` replaces `.enable/.disable/.config` (removed in kernel 5.13+) |
 | RCIO `remove` return type | `rcio_source/src/rcio_spi.c` (`LINUX_VERSION_CODE >= 6.2.0`) | Kernel 6.2+ changed `spi_driver.remove` to return void |
+| RCIO kernel 6.12 fixes | `rcio_source/src/rcio_pwm.c` + `rcio_gpio.c` | `pwmchip_alloc`/`pwmchip_put`, `gpiochip_add_data`, `pwm_ops.owner` guard, `struct rcio_pwm` layout — all `#if LINUX_VERSION_CODE >= 6.12.0` guarded |
 | Separate Pi 5 overlay | `rcio_source/rcio-pi5-overlay.dts` | Pi 5 uses bcm2712; original `rcio-overlay.dts` (bcm2709) kept for Pi 4 |
 | Navio2 SPI0 3rd CS | `rcio_source/navio2-spi0-cs2.dts` (GPIO22) | Creates `/dev/spidev0.2` for the LSM9DS1 magnetometer; Pi 5 SPI0 has only 2 CS by default. Without it, enabling the compass panics. |
 | RGB LED device tree | `rcio_source/navio2-led.dts` | Creates `/sys/class/leds/rgb_led0/1/2` for ArduPilot status LED |

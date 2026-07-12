@@ -845,3 +845,46 @@ ArduPilot Rover 4.6.3 fully integrated on Pi 5 with Navio2 board subtype. All su
 - `rcio_source/src/rcio_gpio.c` — `GPIO_CHIP_OFFSET = -1` (dynamic allocation)
 - `rcio_source/src/rcio_spi.c` — `module_param()` for CS delays
 - `rcio_source/rcio-pi5-overlay.dts` — NEW: separate Pi 5 overlay
+
+### Session 14 (2026-07-12) — Clean check on fresh SD card + kernel 6.12 fixes
+
+- Agent: opencode (glm-5.2:cloud)
+- Context: User flashed a fresh Bookworm SD card to verify reproducibility from QUICK_START.md
+
+#### Work completed
+
+- **Clean check performed**: flashed fresh Raspberry Pi OS Bookworm 64-bit, followed QUICK_START.md steps 1-10
+- **Fresh image shipped kernel 6.12.93** (not 6.6.51 like the original Pi) — required 3 new API fixes in RCIO source:
+  1. `rcio_gpio.c`: `gpiochip_add()` → `gpiochip_add_data(gc, NULL)` (old API removed in 6.12)
+  2. `rcio_pwm.c`: `pwm_ops.owner` removed in 6.12 → moved to `pwm_chip.owner`, guarded by `LINUX_VERSION_CODE`
+  3. `rcio_pwm.c`: `pwm_chip.dev` changed from `struct device *` to embedded `struct device` + flexible array `pwms[]` → refactored to use `pwmchip_alloc()`/`pwmchip_put()` for 6.12+, `kzalloc()`/`kfree()` for older. `struct rcio_pwm` conditionally drops `pwm_chip` member for 6.12+. `to_rcio_pwm()` uses `pwmchip_get_drvdata()` for 6.12+, `container_of()` for older. Global `rcio_pwm_chip` pointer stores the framework-allocated chip.
+- **All 10 steps validated on fresh Pi 5**:
+  - SPI/I2C enabled, overlays compiled and installed ✅
+  - RP1 drive-strength service installed ✅
+  - RCIO modules built (with 6.12 fixes) ✅
+  - RCIO blacklisted, rcio-startup.sh created ✅
+  - Reboot: `alive=1`, `board_name=navio2`, `crc=0xb9064332` ✅
+  - ArduPilot master cloned, PR commits cherry-picked, built in 4m46s ✅
+  - Systemd service + MOTD installed ✅
+  - ArduPilot boots: MS5611 found, MPU9250 detected, PWM 14ch exported, ADC/RCIN/LEDs working, no kernel crash ✅
+- **First attempt crashed** in `rcio_pwm_request` due to `to_rcio_pwm()` returning invalid pointer (container_of on wrong layout). Fixed by using `pwmchip_get_drvdata()` and removing `pwm_chip` from `struct rcio_pwm` for 6.12+.
+- **Docs updated**: QUICK_START.md (kernel version compatibility table), TECHNICAL_ARCHITECTURE.md, TECHNICAL_SETUP.md, AGENTS.md, IMPLEMENTATION_PLAN.md, TODO.md
+- **CLEAN_CHECK_REPORT.md deleted** — info folded into proper docs
+
+#### Remaining work
+
+- Update RCIO PRs #11/#12 with kernel 6.12 fixes
+- QGC calibration (user task — accelerometer, radio, flight modes, failsafe)
+- Repair LiPo power connector (user task)
+- Forum posts, ROS2, Hailo pipeline
+
+#### Files modified
+
+- `rcio_source/src/rcio_pwm.c` — kernel 6.12 fixes (pwmchip_alloc, struct rcio_pwm, to_rcio_pwm, pwm_ops.owner, rcio_pwm_chip global, create/remove functions)
+- `rcio_source/src/rcio_gpio.c` — `gpiochip_add` → `gpiochip_add_data`
+- `docs/QUICK_START.md` — kernel version compatibility table, 6.12 API changes documented
+- `docs/TECHNICAL_ARCHITECTURE.md` — 6.12 fixes in RCIO kernel module section
+- `docs/TECHNICAL_SETUP.md` — 6.12 compatibility notes
+- `docs/IMPLEMENTATION_PLAN.md` — added RCIO PR update task
+- `docs/TODO.md` — added kernel 6.12 PR update and Claude audit tasks
+- `AGENTS.md` — added 6.12 fixes to architecture section

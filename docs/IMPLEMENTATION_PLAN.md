@@ -70,6 +70,7 @@ Define the project work plan and record its technical evolution.
 - [ ] **External F9P GPS** on `/dev/ttyACM0` (`SERIAL3`) when connected
 - [ ] **Kogger depth sounder** on `/dev/ttyUSB0` (`SERIAL4`) when connected
 - [ ] **Clean up Pi 5 home directory** (temp files, old logs)
+- [ ] **Update RCIO PRs** with kernel 6.12 fixes (`pwmchip_alloc`, `gpiochip_add_data`, `pwm_ops.owner`)
 - [ ] **Publish solution**: fork emlid/rcio + ArduPilot PRs + forum posts
   - RCIO PR #11 (bugfixes): [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) — safe for all platforms
   - RCIO PR #12 (Pi 5 support): [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) — dynamic GPIO base, module_param CS delays
