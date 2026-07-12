@@ -888,3 +888,35 @@ ArduPilot Rover 4.6.3 fully integrated on Pi 5 with Navio2 board subtype. All su
 - `docs/IMPLEMENTATION_PLAN.md` — added RCIO PR update task
 - `docs/TODO.md` — added kernel 6.12 PR update and Claude audit tasks
 - `AGENTS.md` — added 6.12 fixes to architecture section
+
+### Session 15 (2026-07-12) — Claude audit of the kernel 6.12 fixes + follow-up fixes
+
+- Agent: Claude Code (Opus 4.8)
+- Context: User asked Claude to audit opencode's session-14 kernel-6.12 work (task #18) and verify the clean-card reproduction against the running Pi.
+
+#### Audit verdict — 6.12 port is correct and hardware-validated
+
+Verified read-only against the running fresh card (kernel 6.12.93): `alive=1`, `board_name=navio2`, RCIO `pwmchip1` `npwm=14`, `PWM probe success`, no dmesg errors, ArduPilot master + both PR cherry-picks present. The three 6.12 changes are correct:
+- `gpiochip_add_data(&gpiochip, NULL)` — safe; gpio callbacks use the module-global `gpio.rcio`, never `gpiochip_get_data`.
+- `pwmchip_alloc()`/`pwmchip_get_drvdata()`/`pwmchip_put()` — correct migration for the 6.12 `pwm_chip` layout (embedded `struct device` + flexible `pwms[]`); `pwmchip_put` (not `kfree`) is the right free path.
+- `pwm_ops.owner` removed — correct; `pwmchip_add()` macro passes `THIS_MODULE`.
+
+#### Findings found + fixed (all committed as `axonbf`, validated on HW)
+
+- **A — CRC sign-extension** (`rcio_status.c`): `regs[1] << 16` was signed-int, so `status/crc` printed `0xffffffffb9064332` instead of the `0xb9064332` QUICK_START Step 7 verifies. Cast to `uint32_t`. Latent on all kernels. Repo commit `fc253e8`.
+- **M1 — dead code** (`rcio_pwm.c`): `to_rcio_pwm()` was never called (all callbacks use the global `pwm`), so the session-14 claim that the boot crash was "in `to_rcio_pwm`" can't be literal — an uncalled function can't crash. Real fix was dropping the embedded `struct pwm_chip` + `pwmchip_alloc`. Removed the dead function. Repo commit `96dcfb7`.
+- **M2 — probe logging** (`rcio_pwm.c`): `rcio_pwm_probe` logged "PWM probe success" even when `rcio_hardware_init()` failed. Now logs the failure and returns early. (Deeper pwmchip-unwind on failure left as optional task #21.) Repo commit `96dcfb7`.
+- **D1 — pwmchip index doc accuracy**: on 6.12 RCIO is `pwmchip1`, not `pwmchip6` (6.6). The index shifts with RP1 enumeration — which is exactly why PR #33655 detects it at runtime. Fixed the general-fact statements across 5 docs (dated validation records left as history). Repo commit `11abd6b`.
+
+#### PR #12 updated (task #17)
+
+Pushed the 6.12 fixes + CRC fix + pwm cleanup to `axonbf/rcio-dkms` branch `pi5-support-v2` (head `d09373f`, 2 commits on top of `3af18f3`). Byte-identical to the hw-validated vendored `rcio_source/`. QUICK_START provenance pin updated `3af18f3` → `d09373f`.
+
+#### Handed to opencode
+
+- **B (task #19)** — `ardurover` service is `disabled`+`inactive` on the fresh card; enable for boot auto-start.
+- **C (task #20)** — commit `5b77d93` was authored as `...@agcocorp.com` (corporate email now in public history); re-attribute to `axonbf`. Claude already set repo-local git identity so future commits are correct.
+
+#### Note on the git identity flip
+
+The gh/git identity in this workspace switched to the AGCO corporate account mid-work (caused commit `5b77d93` misattribution and a push 403). Claude set the repo-local `user.email` to `mail@benjaminfernandez.info`. Worth checking what switched it.

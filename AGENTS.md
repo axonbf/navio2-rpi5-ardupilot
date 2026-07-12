@@ -61,7 +61,8 @@ sudo ./Build/LED
 - RCIO PWM API migrated from `.enable/.disable/.config` to `.apply/.get_state` (kernel 5.13+ removed old API)
 - RCIO SPI CS delays via `module_param()` (defaults to 0; Pi 5 passes `cs_setup_us=50 cs_hold_us=50 cs_inactive_us=500`)
 - RCIO `spi_driver.remove` return type guarded by `LINUX_VERSION_CODE >= 6.2.0`
-- RCIO kernel 6.12 fixes: `pwmchip_alloc`/`pwmchip_put` (embedded `struct device` + flexible `pwms[]`), `gpiochip_add_data`, `pwm_ops.owner` removed — all guarded by `LINUX_VERSION_CODE >= 6.12.0`
+- RCIO kernel 6.12 fixes: `pwmchip_alloc`/`pwmchip_put` (embedded `struct device` + flexible `pwms[]`), `gpiochip_add_data`, `pwm_ops.owner` removed — all guarded by `LINUX_VERSION_CODE >= 6.12.0`. Fresh Bookworm ships **kernel 6.12.93**; validated on a clean SD card (opencode session 14). Also fixed: firmware CRC sign-extension (`status/crc` now prints `0xb9064332`, was `0xffffffffb9064332` — cast `regs[1]` to `uint32_t`) and removed dead `to_rcio_pwm()`. **All in PR #12** (`pi5-support-v2` head `d09373f`), byte-identical to the hw-validated `rcio_source/`.
+- RCIO pwmchip index is **not fixed**: `pwmchip6` on kernel 6.6, `pwmchip1` on kernel 6.12 (RP1 enumeration shifts) — ArduPilot detects it at runtime (PR #33655), so never hardcode it.
 - Separate device tree overlays: `rcio-overlay.dts` (Pi 4, bcm2709) and `rcio-pi5-overlay.dts` (Pi 5, bcm2712)
 - Navio2 RGB LED: device tree overlay `navio2-led.dtbo` creates `/sys/class/leds/rgb_led{0,1,2}` from GPIO4/6/27
 - Navio2 compass: `navio2-spi0-cs2.dtbo` adds a 3rd SPI0 chip-select on GPIO22 → `/dev/spidev0.2` → LSM9DS1 magnetometer + AK8963 both detected as compasses. Pi 5 SPI0 exposes only 2 CS by default; without it, enabling the compass panics on the missing `/dev/spidev0.2`.
