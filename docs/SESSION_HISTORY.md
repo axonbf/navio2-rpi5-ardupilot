@@ -1114,3 +1114,9 @@ No analog module > 6 A with good V/I sensing fits the Navio2 analog port; the hi
 Parts on order; validate on hardware when they arrive. Only needed once the Hailo HAT is re-installed (currently removed → the 3 A analog PM suffices). Tracked as TODO #25.
 
 Sources: ArduPilot Battery Monitors landing page; Power Module Configuration; Adafruit INA228; ArduPilot Discourse (INA2xx + baro on one I2C bus).
+
+#### Session 20 correction (same day) — real numbers
+
+- **Motors identified**: 2× Roxxy 3536/06 (~550 W, 50 A max each, 3S) → **~100 A peak total**. That rules out the Holybro PM02D (30 A continuous wiring) and any 10 A INA breakout for measurement. Corrected measurement pick: **Mauch HS-200 hall-effect** (analog → Navio2 analog port) or **INA228 + 100–200 A external shunt** (I2C). Sensor on main battery + = total draw.
+- **Supply sizing**: board budget ~6–8 A peak at 5 V (Pi 5 ~2.5–3 A + Hailo ~0.5–1 A + NVMe M.2 SSD ~0.5–1.5 A + Navio2 ~0.3 A) → size to **≥8–10 A continuous (~50 W)**; 6 A is marginal. Use a **wide-input buck (8–36 V → 5 V)** — a buck takes an input range, so a varying LiPo needs no stable input; prefer fixed 5 V out (no trimpot drift).
+- **PM02D BEC = 3 A** confirmed measurement-class only (can't power the stack).
