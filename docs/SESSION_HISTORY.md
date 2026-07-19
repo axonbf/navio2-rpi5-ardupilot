@@ -1096,3 +1096,21 @@ At a bidirectional 1500-neutral trim the ESC just repeated its power-up init jin
 - The user's "the ESC keeps reconfiguring" observation was the decisive clue (repeated init = repeated signal dropout) — sysfs `duty_cycle` looked perfect throughout, so the bug was invisible there.
 - Fix drops the old ArduPilot-write watchdog → future work: proper host-heartbeat (TODO #26). Whole-Pi death is still covered by the STM32's own timeout (kernel worker stops → STM32 failsafes).
 - Aside: cheap ESCs re-learn neutral from the power-up signal and vary per unit — one Pi 3 motor idled slightly at 1500, fixable with a per-channel `SERVOx_TRIM` tweak.
+
+### Session 20 (2026-07-19) — Power module plan: high-current supply + precise I2C measurement
+
+- Agent: Claude Code (Opus 4.8) — design consult; user ordering parts to validate.
+- Continues Session 18 (power budget). Refines the "Pololu supply + keep analog PM for measurement" plan.
+
+#### Decision
+Split the two jobs instead of forcing the weak analog POWER port to do both:
+- **Supply** (agree with Session 18): high-current 5 V BEC — **Pololu 12A (D24V120F12)** or **Matek BEC12S PRO** — for the Pi 5 + Navio2 + Hailo stack (~6–8 A peak). No measurement; that's fine.
+- **Measure** (the upgrade): **INA226 / INA228 I2C power monitor** on the Navio2 I2C bus (bus 1, shared with MS5611 at a different address). ArduPilot-native `BATT_MONITOR = 21` (INA2xx), `BATT_I2C_BUS` / `BATT_I2C_ADDR`. Much more precise than the analog PM (INA226 ≈ 1.25 mA / 1.25 mV; INA228 = 20-bit), digital, temperature-stable. Shunt high-side on the main battery + → measures total draw (motors + BEC + electronics), which also removes Session 18's "does the analog PM still measure when not the main path?" concern.
+
+#### Why not a single better analog PM
+No analog module > 6 A with good V/I sensing fits the Navio2 analog port; the higher-current ArduPilot modules are CAN/I2C (incompatible with the analog port). Mauch (hall-effect) is the premium analog option and fits, but its BECs (≤6 A) are marginal for Pi 5 + Hailo, so it would still need a Pololu for supply — making the INA2xx I2C route cheaper, more precise, and cleaner.
+
+#### Status
+Parts on order; validate on hardware when they arrive. Only needed once the Hailo HAT is re-installed (currently removed → the 3 A analog PM suffices). Tracked as TODO #25.
+
+Sources: ArduPilot Battery Monitors landing page; Power Module Configuration; Adafruit INA228; ArduPilot Discourse (INA2xx + baro on one I2C bus).

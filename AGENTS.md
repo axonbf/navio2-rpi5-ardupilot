@@ -80,14 +80,16 @@ sudo ./Build/LED
 - **Follow-up (future work)**: the fix drops the old ArduPilot-write watchdog; a proper host-heartbeat should replace it (see `docs/TODO.md`). Also note: cheap ESCs re-learn neutral from the signal at power-up, and per-unit neutral varies (may need per-channel `SERVOx_TRIM` tweak).
 - **See**: `docs/SESSION_HISTORY.md` Sessions 17 + 19.
 
-## Power module + Hailo HAT power budget (RESOLVED for now, 2026-07-19)
+## Power module + Hailo HAT power budget (plan finalized 2026-07-19)
 
-- **Problem**: Pi 5 + Navio2 + Hailo HAT together need > 5 A. The Navio2 POWER port is a 6-pin JST-PA 2.0mm **analog** port — CAN / I2C power modules (e.g. PM02 V3.2) do NOT work on it. Original analog PM (3 A) and PM02 V3.2 (3 A) both insufficient.
-- **ArduPilot power module survey**: https://ardupilot.org/copter/docs/common-powermodule-landingpage.html — no analog module > 6 A with V/I measurement found that fits the Navio2 POWER port. Higher-current modules on that page are CAN-bus, which Navio2 does not expose on the POWER connector.
-- **Resolution**: functional split — Pololu 12A step-down (https://www.pololu.com/product/5571) supplies Pi 5 + HATs; original analog PM stays connected for voltage/current measurement only. Alternative: Matek BEC12S PRO (https://www.mateksys.com/?portfolio=bec12s-pro).
-- **Open**: verify the analog PM still measures correctly when it is no longer the primary current path (may need to stay in series with the load for current reading). Pending hardware test.
-- **Current boat state**: Hailo HAT removed; Pi 5 + Navio2 + sensors only needs ~2 A, so the existing 3 A analog PM is sufficient. The Pololu/Matek split-supply is for when the Hailo HAT is re-installed.
-- **See**: `docs/SESSION_HISTORY.md` Session 18 for the full investigation and links.
+- **Problem**: Pi 5 + Navio2 + Hailo HAT together peak ~6–8 A at 5 V. The Navio2 POWER port is a 6-pin JST-PA 2.0mm **analog** port whose BEC is only ~3 A, and its analog V/I sensing is low-precision. CAN/I2C power modules (e.g. PM02 V3.2) do NOT work on the analog POWER connector.
+- **Key insight**: **supply and measurement are two separate jobs** — don't make one weak analog PM do both. Solve each with the right part.
+- **Plan (chosen; user ordering parts to validate):**
+  1. **Supply** — high-current 5 V BEC feeds the Pi 5 stack: **Pololu 12A step-down** (https://www.pololu.com/product/5571) or **Matek BEC12S PRO** (https://www.mateksys.com/?portfolio=bec12s-pro). No measurement — that's fine.
+  2. **Measure** — **INA226 / INA228 I2C power monitor** on the Navio2 I2C bus (bus 1, shared with the MS5611 baro at a different address). ArduPilot-native: `BATT_MONITOR = 21` (INA2xx family), `BATT_I2C_BUS` / `BATT_I2C_ADDR`. Far more precise than the analog PM (INA226 ≈ 1.25 mA / 1.25 mV; **INA228 = 20-bit**), digital, temperature-stable. Wire the INA shunt **high-side on the main battery +** so it measures everything downstream (motors + BEC + electronics) — this removes the old "does the analog PM still measure when it's not the main path?" concern.
+- **Why not a single better analog PM**: no analog module > 6 A with good V/I sensing fits the Navio2 analog port; higher-current ArduPilot modules are CAN/I2C. Mauch (hall-effect, HS-100/HS-200) is the premium *analog* option and fits the analog port, but its BECs (≤6 A) are marginal for Pi 5 + Hailo — so you'd still add a Pololu for supply. The INA2xx I2C route is cheaper, more precise, and cleaner.
+- **Current boat state**: Hailo HAT removed; Pi 5 + Navio2 + sensors only needs ~2 A, so the existing 3 A analog PM is sufficient *for now*. The Pololu-supply + INA2xx-measurement plan is for when the Hailo HAT is re-installed.
+- **See**: `docs/SESSION_HISTORY.md` Session 18 (investigation) + Session 20 (this plan); `docs/TODO.md` task #25.
 
 ## Key Conventions
 
