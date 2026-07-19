@@ -74,3 +74,20 @@ Provide a text transcription of the official Navio2 pinout image so non-vision t
 - `GPIO17/GPIO18` on physical pins `11/12` are **not** RCIO SWD pins.
 - They are labeled by Emlid as `GPIO17_DF13` and `GPIO18_DF13`.
 - Earlier Pi 5 SWD tests that used `GPIO17/GPIO18` were therefore probing the wrong header pins.
+
+## Power module port (added 2026-07-19)
+
+The Navio2 POWER port is a **Pixhawk-compatible 6-pin power socket** (JST-GH 1.25 mm) — confirmed by Emlid's spec (6-pin, 5.3 V ±0.1 V / 3 A BEC, up to 90 A sense). Standard Pixhawk pin order:
+
+| Pin | Signal | Notes |
+|---|---|---|
+| 1 | +5 V (VCC) | PM's BEC output (only ~3 A — unused when powering the stack from a separate DC/DC) |
+| 2 | +5 V (VCC) | |
+| 3 | Current sense | analog, 0–3.3 V into the Navio2 ADC |
+| 4 | Voltage sense | analog, 0–3.3 V into the Navio2 ADC |
+| 5 | GND | |
+| 6 | GND | |
+
+**Compatibility:** Holybro **PM02 V3.2** and **Mauch** sensors use this same Pixhawk pin order → plug in directly (verify the physical connector/pitch). **CUAV** modules use a *different* pin order → need re-pinning/adapter. Always re-calibrate `BATT_VOLT_MULT` + `BATT_AMP_PERVLT` when swapping modules (each has different scaling). ArduPilot analog battery monitor = `BATT_MONITOR 4`.
+
+> Note: Emlid's own pinout diagram is an image; the order above is the Pixhawk standard that "Pixhawk-compatible" implies. Eyeball Emlid's `pinout.png` against this before crimping if you want 100% certainty.
