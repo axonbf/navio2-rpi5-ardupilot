@@ -141,3 +141,11 @@ sudo ./Build/LED
 ## Documentation Rules
 
 When making changes, update docs/ files following the rules in docs/README.md. Maintain cross-consistency between TECHNICAL_ARCHITECTURE.md, IMPLEMENTATION_PLAN.md, and TECHNICAL_SETUP.md.
+
+## Propulsion & RPM notes (2026-07-19)
+
+- **Application**: fresh water; motors intended **fully submerged as thrusters** (the Roxxy outrunner construction has no shaft-out). Reverse already fixed (RCIO refresh).
+- **Roxxy submerged**: aircraft outrunner, not sealed → corrodes underwater. Fresh water is forgiving, so it can run submerged **if treated** (stainless/ceramic bearings, potted/conformal-coated windings, corrosion-proofed shaft/magnets). Cheap, reuses existing Roxxy + QuicRun; moderate life.
+- **Alternative — Blue Robotics T200**: purpose-built submersible thruster (corrosion-resistant outrunner + integrated prop/duct). ~$200 / €200–230 each (×2 ≈ €400+). Optimized for **16 V (4S)** — at 3S only ~110 W / 2.4 kgf vs ~350 W / 6.7 kgf at 20 V. Replaces the Roxxy; needs its own ESC (Blue Robotics Basic ESC, or test the QuicRun). No published KV (specced by thrust/RPM/power curves).
+- **RPM measurement — Navio2/Navigator limitation**: the RCIO co-processor outputs **standard servo PWM only, NOT DShot**, so bidirectional-DShot eRPM telemetry is **unavailable**. The Blue Robotics **Navigator** has the *same* limit (PWM via a PCA9685 I2C chip). DShot needs a real MCU flight controller (Pixhawk/STM32); a Navigator-based custom board would also lack DShot.
+- **RPM options on a Pi-based FC**: (1) **ESC serial telemetry** (telem wire → Pi UART → ArduPilot ESC telemetry) — needs an ESC with a telemetry output (QuicRun / Basic ESC do NOT; a drone/FETtec/Hobbywing-telemetry ESC does). (2) **Physical optical/Hall RPM sensor** — only viable with an accessible **dry shaft**; does NOT work on a sealed submerged thruster. So for submerged thrusters, RPM must come electrically from the ESC (eRPM).
