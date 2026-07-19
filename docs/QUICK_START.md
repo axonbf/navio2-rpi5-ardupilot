@@ -331,7 +331,7 @@ Every external dependency is pinned so a clean SD card reproduces this exact sta
 | RCIO pwmchip runtime detect | `axonbf/ardupilot` | `pr-navio2-pwmchip` | `84182ac` | #33655 | cherry-pick (Step 8) |
 | PWM_Sysfs duty_cycle retry | `axonbf/ardupilot` | `pr-pwm-sysfs-retry` | `15967de` | #33656 | cherry-pick (Step 8) |
 | RCIO bugfixes | `axonbf/rcio-dkms` | `bugfixes` | `e2d2c36` | #11 | vendored in `rcio_source/` |
-| RCIO Pi 5 support + kernel 6.12 + CRC fix | `axonbf/rcio-dkms` | `pi5-support-v2` | `d09373f` | #12 | vendored in `rcio_source/` |
+| RCIO Pi 5 support + kernel 6.12 + CRC fix | `axonbf/rcio-dkms` | `pi5-support-v2` | `f3a4887` | #12 | vendored in `rcio_source/` |
 
 The forks are on **your** GitHub account, so these branches remain available whether or not the upstream PRs are ever approved. Pinning the commit SHA additionally protects against a later force-push of your own branch. The two `rcio-dkms` commits are recorded for provenance only — reproduction builds the module directly from `rcio_source/`.
 

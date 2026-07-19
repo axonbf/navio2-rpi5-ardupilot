@@ -55,7 +55,7 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 
 **A correction (important):** the earlier "obsolete" verdict was **wrong**. Master's navio2 board still defaults to the `arm-linux-gnueabihf` (32-bit) toolchain, so a 64-bit Pi build fails unless you pass **`--toolchain=native`** at configure. It's a build flag, not a code change — so A stays out of the PR — but **QUICK_START Step 8 must be updated** to add `--toolchain=native` and to drop the now-removed #4/#5 (D/E) patch instructions.
 
-**PRs open (2026-07-05):** [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) (C, pwmchip runtime detection) and [#33656](https://github.com/ArduPilot/ardupilot/pull/33656) (G, PWM_Sysfs retry) — clean, template-formatted, hardware-tested, no AI trailer. RCIO PRs [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) + [#12](https://github.com/emlid/rcio-dkms/pull/12) still open (clean/mergeable; #12 stacked on #11). **Update 2026-07-12:** #12 extended with kernel 6.12 support + CRC fix + pwm cleanup (head `d09373f`) — see the kernel-6.12 note below.
+**PRs open (2026-07-05):** [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) (C, pwmchip runtime detection) and [#33656](https://github.com/ArduPilot/ardupilot/pull/33656) (G, PWM_Sysfs retry) — clean, template-formatted, hardware-tested, no AI trailer. RCIO PRs [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) + [#12](https://github.com/emlid/rcio-dkms/pull/12) still open (clean/mergeable; #12 stacked on #11). **Update 2026-07-12:** #12 extended with kernel 6.12 support + CRC fix + pwm cleanup (head `f3a4887`) — see the kernel-6.12 note below.
 
 **Compass resolved (2026-07-05):** Pi 5's SPI0 lacked `/dev/spidev0.2` (RP1 exposes only 2 CS), so enabling the compass **panicked**. Added `navio2-spi0-cs2` overlay (3rd CS on GPIO22) → `spidev0.2` appears → **2 compasses detected** (LSM9DS1 magnetometer devtype 6 on spidev0.2 + AK8963 devtype 4 via MPU9250). Compass enabled in `boat_navio2.parm` (backup `.pre-compass.bak`); **calibration completed successfully by user.** QUICK_START/AGENTS/overlay source updated. **Follow-up ANSWERED (see 2nd-IMU note below):** the LSM9DS1 accel/gyro on GPIO25 is **not** defective — the chip is healthy; the blocker is ArduPilot's LSM9DS1 IMU driver on Pi 5 / RP1, not hardware.
 
@@ -79,34 +79,40 @@ Final change map uses letters **A–G** (avoids collision with the old #1–#5).
 | # | Task | Priority | Sub-tasks |
 |---|---|---|---|
 | 8 | LSM9DS1 2nd IMU (deferred) | Low | Future work only — see verdict above; needs upstream LSM9DS1 backend debug on Pi 5 / RP1 |
-| 9 | Repair LiPo power connector | High | Physical repair (user) — fire risk before water test |
+| ~~9~~ | ✅ **DONE** — Repair LiPo power connector | High | Fixed 2026-07-12 |
 | 14 | Full QGC calibration | High | Radio calibration, flight modes, failsafe, servo direction |
 | 15 | Clean up Pi 5 home directory | Medium | Remove ~80 debug files, old params, stale dirs |
 | 11 | Install ROS2 Jazzy + ArduPilot DDS | Medium | Install ROS2, configure AP_DDS, micro-ros-agent |
 | 12 | Hailo-8L + ROS2 inference pipeline | Medium | Semantic segmentation model, ROS2 camera topic, Hailo inference |
 | 13 | Evaluate Navigator (BlueRobotics) | Low | Research only — Pi 4 only, unknown Pi 5 porting feasibility |
-| ~~17~~ | ✅ **DONE** — RCIO PR #12 updated with kernel 6.12 fixes + CRC fix + pwm cleanup | Medium | Pushed to `pi5-support-v2` (head `d09373f`): 6.12 API guards (`pwmchip_alloc`/`gpiochip_add_data`/`pwm_ops.owner`), CRC sign-extension fix, dead-code removal. Byte-identical to hw-validated `rcio_source/`. |
+| ~~17~~ | ✅ **DONE** — RCIO PR #12 updated with kernel 6.12 fixes + CRC fix + pwm cleanup | Medium | Pushed to `pi5-support-v2` (head `f3a4887`): 6.12 API guards (`pwmchip_alloc`/`gpiochip_add_data`/`pwm_ops.owner`), CRC sign-extension fix, dead-code removal. Byte-identical to hw-validated `rcio_source/`. |
 | ~~18~~ | ✅ **DONE** — Claude audit of the 6.12 fixes | Medium | Verdict: 6.12 port correct & hw-validated (alive=1, pwmchip1 npwm=14 on 6.12.93). Found+fixed: CRC sign-extension (A), dead `to_rcio_pwm` (M1), probe-success-on-failure logging (M2), pwmchip-index doc accuracy (D1). See Session 15 in SESSION_HISTORY. |
-| 19 | **B** — enable `ardurover` service on the clean card | Medium | **opencode** — service is currently `disabled`+`inactive` on the fresh card; `sudo systemctl enable ardurover` for boot auto-start |
+| ~~19~~ | ✅ **DONE** — `ardurover` service enabled on clean card | Medium | Service enabled + active on clean 6.12 card (boot auto-start). |
 | 20 | **C** — scrub corporate email from public repo | Medium | **opencode** — commit `5b77d93` was authored as `...@agcocorp.com`; re-attribute to `axonbf`/`mail@benjaminfernandez.info`. (Claude already set repo-local git identity so future commits are correct.) |
 | 21 | **M2b** — unwind pwmchip on probe failure (optional hardening) | Low | Claude/opencode — `rcio_pwm_probe` still leaves the added pwmchip registered if `rcio_hardware_init()` fails; low-risk error path, not triggerable on working HW. Only the false "success" log was fixed (M2). |
+| ~~22~~ | ✅ **DONE** — Boat reverse fixed (RCIO driver, not ArduPilot/ESC) | High | **Root cause was NOT a 4.8 param regression** — `rcio_pwm_update()` stopped refreshing the STM32 on steady values (`armed` watchdog expired), so the STM32 fell back to failsafe-min and bidirectional ESCs never locked onto 1500 neutral. Fix: refresh continuously once driving (`armtimeout>0`). Repo `ba1d62a` + rcio-dkms PR #12 (`f3a4887`). HW-validated: forward + reverse both work. See SESSION_HISTORY Session 19 + AGENTS "Boat motor reverse". |
+| 26 | **Host-heartbeat for RCIO PWM** (future work) | Medium | The reverse fix drops the old ArduPilot-write watchdog (feeds STM32 continuously once `armtimeout>0`). Add a proper host-heartbeat so outputs failsafe if the ArduPilot *process* dies while the kernel worker lives (whole-Pi death is already covered by the STM32's own timeout). See `rcio_source/src/rcio_pwm.c` `rcio_pwm_update()`. |
+| 23 | Fix `--serial2 /dev/ttyAMA0` in service config | Medium | On Pi 5 the primary UART is `/dev/ttyAMA10` (symlink `/dev/serial0`); `/dev/ttyAMA0` does NOT exist. `/etc/default/ardurover` still has `--serial2 /dev/ttyAMA0` → RC receiver on serial2 fails silently. Fix when RC receiver is connected to Pi 5. |
+| 24 | Verify telemetry port (14550 vs 14551) on clean card | Low | Session context: telemetry on the clean 6.12 card goes to port `14551`, not `14550`. `QUICK_START.md` and `TODO.md` access info still say `14550`. Verify on Pi 5 and update docs if confirmed. |
+| 25 | Verify analog PM measures correctly when not the primary current path | Medium | After the Pololu/Matek split-supply is installed, confirm the original analog PM still reads voltage/current correctly (may need to stay in series with the load for current reading). See Session 18. Only relevant when the Hailo HAT is re-installed. |
 
 ## Next Steps (immediate priority)
 
-1. **Await review on PRs #33655 (C) + #33656 (G)** — both open, clean, hardware-tested. The old unguarded #33647/#33648 were closed and superseded; no further guard work needed.
-2. **Forum posts** — Emlid community + ArduPilot Discourse.
-3. **Repair LiPo power connector** (user task).
+1. ~~Boat reverse regression (task #22)~~ — ✅ **DONE**, root-caused to the RCIO PWM-refresh bug and fixed (repo `ba1d62a`, rcio-dkms PR #12). Reverse works.
+2. **Await review on PRs #33655 (C) + #33656 (G)** — both open, clean, hardware-tested. The old unguarded #33647/#33648 were closed and superseded; no further guard work needed.
+3. **Forum posts** — Emlid community + ArduPilot Discourse.
 4. **Full QGC calibration** — radio, flight modes, failsafe, servo direction.
-5. **Clean up Pi 5 home directory**.
-6. **Install ROS2 Jazzy + ArduPilot DDS**.
-7. **Hailo-8L + ROS2 inference pipeline**.
+5. **Fix `--serial2 /dev/ttyAMA0` → `/dev/ttyAMA10`** in `/etc/default/ardurover` when RC receiver is connected to Pi 5 (task #23).
+6. **Clean up Pi 5 home directory**.
+7. **Install ROS2 Jazzy + ArduPilot DDS**.
+8. **Hailo-8L + ROS2 inference pipeline**.
 
 ## PR Tracker
 
 | PR | Repo | Status | Notes |
 |---|---|---|---|
 | [emlid/rcio-dkms#11](https://github.com/emlid/rcio-dkms/pull/11) | emlid/rcio-dkms | Open | Bugfixes — safe for all platforms, ready for review |
-| [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 support — dynamic GPIO, module_param, **+ kernel 6.12 support + CRC fix** (head `d09373f`, 2026-07-12) |
+| [emlid/rcio-dkms#12](https://github.com/emlid/rcio-dkms/pull/12) | emlid/rcio-dkms | Open | Pi 5 support — dynamic GPIO, module_param, **+ kernel 6.12 support + CRC fix** (head `f3a4887`, 2026-07-12) |
 | [ArduPilot/ardupilot#33655](https://github.com/ArduPilot/ardupilot/pull/33655) | ArduPilot/ardupilot | **Open** | Change C — Navio2 RCIO pwmchip runtime detection. Clean, template-formatted, hardware-tested, no AI trailer |
 | [ArduPilot/ardupilot#33656](https://github.com/ArduPilot/ardupilot/pull/33656) | ArduPilot/ardupilot | **Open** | Change G — PWM_Sysfs duty_cycle retry on slow export. Clean, template-formatted, hardware-tested |
 | [axonbf/navio2-rpi5-ardupilot](https://github.com/axonbf/navio2-rpi5-ardupilot) | Public repo | Live | Setup guide, scripts, overlays, docs |
@@ -145,7 +151,7 @@ git cherry-pick 15967de4b9fdde3d7b99bfa533e6c22fe701c66e   # G — PR #33656
 git submodule update --init --recursive
 
 # RCIO module + overlays are vendored in THIS repo's rcio_source/ (build per QUICK_START Step 4).
-# The rcio-dkms fork branches (bugfixes @ e2d2c36, pi5-support-v2 @ d09373f) are provenance only.
+# The rcio-dkms fork branches (bugfixes @ e2d2c36, pi5-support-v2 @ f3a4887) are provenance only.
 ```
 
 ### Pi 5 state (updated 2026-07-05)

@@ -935,3 +935,164 @@ The gh/git identity in this workspace switched to the AGCO corporate account mid
 
 #### Lesson for future agents (opencode et al.)
 "Compass Not installed" on this board is a **parameter** issue (`COMPASS_ENABLE`), NOT a hardware/SPI/sensor-frequency fault. **Do not change sensor SPI frequencies or hwdef to chase a missing compass** — the frequencies are correct; that is a dead end. (opencode started to change sensor frequencies here; the user stopped it.) Enable the param and reboot.
+
+### Session 17 (2026-07-19) — Pi 5 boat reverse not working (ArduPilot 4.8 regression — open)
+
+- Agent: opencode (ollama glm-5.2:cloud)
+- Symptom: Pi 5 boat drives forward correctly but **reverse does nothing**. With stick full-down the ESC beeps (arming tone) but the motor does not spin; returning to neutral beeps again. Sometimes the motor twitches briefly then stops. Forward works as expected (1100 → 1900 PWM range verified by behavior). Setting trims to 1100 (forward-only config) makes the motors respond correctly in the forward direction — so PWM output and ESC are both functional for forward.
+
+#### Hardware isolation (user swap test) — ESC/RC/motors exonerated
+
+The user physically swapped components between the Pi 3 boat (works forward AND reverse) and the Pi 5 boat (forward only):
+
+1. **Pi 5 ESCs → Pi 3 boat**: Pi 3 boat drove forward AND reverse normally. → ESCs are NOT the problem.
+2. **Pi 5 RC receiver → Pi 3 boat**: Pi 3 boat worked normally. → RC receiver is NOT the problem.
+3. **Pi 5 motors → Pi 3 boat**: Pi 3 boat worked normally. → Motors are NOT the problem.
+
+Conclusion: the problem is on the Pi 5 — software (ArduPilot config or firmware) or PWM generation. Forward PWM works, so the RCIO output stage and the ESC's forward path are fine.
+
+#### Firmware version difference
+
+- **Pi 3: ArduRover 4.0.0** (mature, reverse works)
+- **Pi 5: ArduRover V4.8.0-dev** (master dev build, reverse broken)
+
+#### Parameter diff (Pi3 vs Pi5) — motor params effectively identical
+
+Source: `docs/Pi3/Pi3_mavproxy_ResearchCat.parm` vs `docs/Pi5/Pi5_mavproxy_ResearchCat.parm` (both committed untracked in this session). A full `diff` was run; the motor-related params that match on both:
+
+| Param | Pi3 | Pi5 |
+|---|---|---|
+| `FRAME_CLASS` | 2 | 2 |
+| `PILOT_STEER_TYPE` | 2 | 2 |
+| `MOT_PWM_TYPE` | 0 (Normal) | 0 (Normal) |
+| `MOT_THR_MIN` | 0 | 0 |
+| `MOT_THR_MAX` | 100 | 100 |
+| `MOT_SLEWRATE` | 100 | 100 |
+| `MOT_SPD_SCA_BASE` | 1 | 1 |
+| `MOT_THST_EXPO` | 0 | 0 |
+| `SERVO1_FUNCTION` | 73 (ThrottleLeft) | 73 |
+| `SERVO3_FUNCTION` | 74 (ThrottleRight) | 74 |
+| `SERVO1/3_MIN/MAX` | 1100/1900 | 1100/1900 |
+| `SERVO1/3_TRIM` | 1500 | 1500 |
+| `RC1/3_TRIM` | 1500 | 1500 |
+| `RC3_DZ` | 30 | 30 |
+
+**New-to-4.8 MOT_ params (absent on Pi3, present on Pi5 — regression candidates):**
+
+| Param | Pi5 value | Note |
+|---|---|---|
+| `MOT_THST_ASYM` | 1.0 | 1.0 = symmetric (default) — should be a no-op, but new code path |
+| `MOT_REV_DELAY` | 0 | 0 = no delay — should be a no-op, but new code path |
+| `MOT_STR_THR_MIX` | 0.5 | steering/throttle prioritisation (new) |
+| `MOT_BAT_WATT_TC` | 2.0 | battery power limiting time constant (new) |
+
+#### Official ArduPilot docs — MOT_PWM_TYPE (verified, not guessed)
+
+Source: https://ardupilot.org/rover/docs/parameters.html and `rover-motor-and-servo-configuration.html`.
+
+| Value | Meaning |
+|---|---|
+| 0 | Normal |
+| 1 | OneShot |
+| 2 | OneShot125 |
+| 3 | BrushedWithRelay |
+| 4 | BrushedBiPolar |
+| 5 | DShot150 |
+| 6 | DShot300 |
+| 7 | DShot600 |
+| 8 | DShot1200 |
+
+Docs say:
+- "Brushed BiPolar is for **brushed** motor drivers that use basic PWM duty cycle to control motor direction and speed (low duty = full reverse, 50% = stopped, 100% = full forward)." — **NOT applicable to brushless ESCs.** The boat motors are brushless.
+- Reversing section: "If an **ESC** is used, usually 1500us is used to indicate idle for PWM and DShot systems." → for brushless bidirectional ESCs the correct `MOT_PWM_TYPE` is **0 (Normal)** with 1500 neutral — which both Pi3 and Pi5 already have.
+- ESC Configuration: ESCs have a "Running Model" (forward-only / forward+brake+reverse / forward+reverse). Docs recommend Running Model 3 (Forward and Reverse), programmed via ESC programming card. The swap test already proved the ESC's Running Model is fine on this hardware.
+
+So `MOT_PWM_TYPE` is **correct** on both Pis (0 = Normal). The docs do not support switching to `BrushedBiPolar` for brushless ESCs — that was my earlier wrong guess; I am logging that explicitly here per the no-post-hoc-rationalization rule.
+
+#### Earlier wrong guesses I made (logged per communication rule 1)
+
+1. I said `MOT_THR_MIN` valid range was -100 to allow reverse. The QGC info shows range 0–20. I made the -100 up.
+2. I said `MOT_PWM_TYPE` mapping was "1=BrushedWithReverse, 2=BrushedBiDir". Wrong. Actual mapping is above.
+3. I suggested `MOT_PWM_TYPE = BrushedBiPolar` as the fix. Wrong for brushless motors — that mode is for duty-cycle-controlled brushed drivers, not PWM-pulse brushless ESCs.
+
+The user corrected each of these. Future agents: do not propose `BrushedBiPolar` for brushless ESCs.
+
+#### Open candidates (not yet tested)
+
+- `MOT_PWM_TYPE` value other than 0 — user asked "could changing MOT_PWM_TYPE make a difference?". Per docs, `Normal` is the correct value for a brushless bidirectional ESC, so theoretically no. But it is a 1-param, no-rebuild test, so it's a cheap experiment. **Low confidence.**
+- `MOT_THST_ASYM = 1.0` — new in 4.8, default, but the code path is new. Could be misbehaving even at default.
+- `MOT_REV_DELAY = 0` — new in 4.8, default, but the code path is new.
+- `MOT_STR_THR_MIX = 0.5` — new in 4.8.
+- ArduPilot 4.8 master output stage clamping <1500 → 1500 even when reverse is commanded. Untested.
+- ESC calibration state (the ESC's internal learned endpoints) differing between the two builds. Swap test exonerated the ESC, but only at the Running Model level; a re-calibration of the ESC against the Pi 5's actual PWM range is a possible (untested) factor.
+
+#### Suggested next diagnostic (non-invasive, read-only)
+
+Measure what ArduPilot 4.8 actually puts on the wire in Manual mode, stick centered vs. full-back:
+
+```bash
+# identify pwmchip and channel for SERVO1/3 first, then:
+# stick centered → expect ~1500us duty
+# stick full-back → if <1500 (e.g. 1100): ArduPilot IS sending reverse, ESC rejects it (ESC Running Model issue or ESC calibration)
+#                  if clamped at 1500:    ArduPilot 4.8 is not commanding reverse — firmware/config issue
+for ch in 1 3; do cat /sys/class/pwm/pwmchip1/pwm${ch}/duty_cycle; done
+```
+
+This is the cheapest decisive test. No rebuild, no param change.
+
+### Session 18 (2026-07-19) — Power module investigation: Pi 5 + Navio2 + Hailo HAT exceed 3–5 A analog PMs
+
+- Agent: opencode (ollama glm-5.2:cloud)
+- Symptom: the Navio2 POWER port only accepts analog power modules, and the available analog modules deliver only 3–5 A. Pi 5 + Navio2 + Hailo HAT together need more than 5 A, so the existing analog PM cannot supply the full stack.
+- Hardware constraint: the Navio2 POWER port is a 6-pin JST-PA 2.0mm connector wired for **analog** current/voltage measurement. **CAN / I2C power modules do not work on the Navio2 POWER port** — the high-current CAN modules (e.g. PM02 V3.2, etc.) are incompatible, even though they can deliver more current.
+- Original analog PM (3 A) and PM02 V3.2 (3 A) were both checked — neither solves the current deficit. The problem is not the module brand, it's that the analog-PM class is capped around 3–5 A.
+
+#### Investigated options
+
+1. **Pololu 12A 6V–36V Step-Down Regulator (D24V120F12)** — https://www.pololu.com/product/5571
+   - Can deliver 12 A — comfortably above the Pi 5 + Navio2 + Hailo stack requirement.
+   - Pure power supply — no current/voltage telemetry. Cannot replace the analog PM for measurement.
+   - **Decision: keep the original analog PM installed for voltage/current measurement, and add the Pololu as the sole high-current supply for Pi 5 + HATs.** The analog PM then only carries the measurement side, not the full load.
+
+2. **Matek BEC12S PRO** — https://www.mateksys.com/?portfolio=bec12s-pro
+   - Alternative considered. Same class as the Pololu (BEC, no Navio2-compatible telemetry).
+   - Kept as a backup option; Pololu preferred.
+
+3. **ArduPilot power module landing page** — https://ardupilot.org/copter/docs/common-powermodule-landingpage.html
+   - Surveyed for an analog module with > 6 A **and** voltage/current measurement. None found that satisfies both constraints on the Navio2 6-pin analog POWER port.
+   - Higher-current modules on that page are CAN-bus, which Navio2 does not expose on the POWER connector.
+
+#### Resolution
+
+- **Functional split**: Pololu (or Matek BEC12S PRO) supplies the load; original analog PM stays connected for measurement only.
+- **Open**: confirm the analog PM still measures correctly when it is no longer the primary current path (it may need to remain in series with the load to read current). Pending hardware test.
+- **Hailo HAT removed from boat in the meantime** (see AGENTS.md "Current Phase") — power budget solved at the source for the current boat configuration. Pi 5 + Navio2 + sensors only needs ~2 A, so the existing 3 A analog PM is sufficient for the current boat. The Pololu/Matek split-supply solution is for when the Hailo HAT is re-installed.
+
+---
+
+### Recent undiscussed topics (for the next agent / session)
+
+The user opens sessions by picking one of these. Read the linked entries before starting:
+
+- **Power module + Hailo HAT power budget** — Session 18 (this file). Resolution: Pololu/Matek BEC as supply + original analog PM as measurement only; Hailo HAT currently removed. Open: verify analog PM still measures when not the primary current path.
+- **Boat reverse regression (ArduPilot 4.8)** — Session 17 (this file). Open. Cheapest decisive test: read `/sys/class/pwm/pwmchip*/pwm*/duty_cycle` stick-centered vs. stick-full-back. Reference parm files: `docs/Pi3/Pi3_mavproxy_ResearchCat.parm` (4.0.0, works), `docs/Pi5/Pi5_mavproxy_ResearchCat.parm` (4.8.0-dev, broken).
+- **Other open TODOs** — see `docs/TODO.md` Pending table (#20 corporate email scrub, #21 pwmchip unwind, #23 serial2 device path, #24 telemetry port verify).
+
+### Session 19 (2026-07-19) — Boat reverse ROOT-CAUSED & FIXED (RCIO PWM refresh bug)
+
+- Agent: Claude Code (Opus 4.8), with the user driving hardware tests
+- Continues Session 17 (reverse "regression"). It was **not** an ArduPilot 4.8 param regression.
+
+#### The real problem
+At a bidirectional 1500-neutral trim the ESC just repeated its power-up init jingle forever ("kept reconfiguring") and never armed — no forward, no reverse. Only a forward-only ~1100 trim worked. Layered PWM capture (RC input `rcin` + `pwm0/pwm2` duty_cycle) proved ArduPilot + RCIO output the correct full 1100↔1900 range with a clean 1500 neutral — values identical to the working Pi 3. So the *value* was right; the *signal* wasn't continuous.
+
+#### Root cause (found by instrumenting the driver)
+`rcio_pwm_update()` only pushes PWM to the STM32 while `armed` is true — a 100 ms watchdog reset **only when ArduPilot writes a PWM value**. ArduPilot writes on change only, so a steady value (held stick / disarmed neutral) let the watchdog expire; the driver then stopped refreshing the STM32, which fell back to its **failsafe output (~min)**. A logged `armed` flag confirmed it went false and *stayed* false during steady neutral. On a bidirectional ESC the wire flickered 1500↔failsafe-min → the ESC never locked onto neutral → re-inited forever. Forward-only ~1100 ≈ failsafe, so it masked the bug.
+
+#### Fix
+`rcio_source/src/rcio_pwm.c`: push the current values to the STM32 every cycle once the host has started driving (`armtimeout > 0`), instead of gating on the `armed` watchdog. Repo commit `ba1d62a`; rcio-dkms PR #12 `pi5-support-v2` head `f3a4887`. **Validated on Pi 5 / kernel 6.12.93 with a real bidirectional ESC: init plays once, arms at neutral, forward AND reverse both work.**
+
+#### Notes
+- The user's "the ESC keeps reconfiguring" observation was the decisive clue (repeated init = repeated signal dropout) — sysfs `duty_cycle` looked perfect throughout, so the bug was invisible there.
+- Fix drops the old ArduPilot-write watchdog → future work: proper host-heartbeat (TODO #26). Whole-Pi death is still covered by the STM32's own timeout (kernel worker stops → STM32 failsafes).
+- Aside: cheap ESCs re-learn neutral from the power-up signal and vary per unit — one Pi 3 motor idled slightly at 1500, fixable with a per-channel `SERVOx_TRIM` tweak.

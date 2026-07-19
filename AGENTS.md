@@ -70,6 +70,25 @@ sudo ./Build/LED
 - Pi 3 second-HAT known-good uses BCM aux SPI at `/soc/spi@7e215080`, `spi1.0`, `alive=1`, `board_name=navio2`, `crc=0xb9064332`, git hash `7851d1a`, `pwm_ok=1`
 - **No Pi-controlled NRST or BOOT0 pins on Navio2 HAT** — NRST hardwired HIGH (pull-up to 3.3V), BOOT0 tied to GND
 
+## Boat motor reverse — ROOT-CAUSED & FIXED (2026-07-19)
+
+- **Symptom**: Pi 5 boat drove forward only at a forward-only trim (~1100); at a bidirectional 1500-neutral trim the ESC just beeped its power-up jingle **repeatedly** ("kept reconfiguring") and never armed — no forward, no reverse. Not a "reverse" bug; an ESC-never-arms bug.
+- **Root cause (RCIO driver)**: `rcio_pwm_update()` only pushed PWM to the STM32 while `armed` was true — a 100 ms watchdog reset **only when ArduPilot writes a PWM value**. ArduPilot writes on *change* only, so any steady value (held stick / disarmed neutral) let the watchdog expire; the driver then stopped refreshing the STM32, which fell back to its **failsafe output (~min)**, not the commanded value. On a bidirectional ESC the signal flickered 1500↔failsafe-min → the ESC re-ran its init forever and never locked onto neutral. A forward-only ~1100 trim ≈ failsafe, so it masked the bug (forward worked). The Pi 3 keeps the STM32 fed → works.
+- **How it was found**: instrumented the driver's `armed` flag — it went **false and stayed false** the whole time the throttle was steady, and the code only refreshes the STM32 when `armed`. Confirmed by ESC behaviour after the fix.
+- **Fix**: `rcio_source/src/rcio_pwm.c` — push the current values to the STM32 every cycle once the host has started driving (`armtimeout > 0`), instead of gating on the `armed` watchdog. In rcio-dkms **PR #12** (`pi5-support-v2`). Validated on Pi 5 / kernel 6.12.93 with a real bidirectional ESC: init plays once, arms at neutral, **forward + reverse both work**.
+- **Diagnostic lesson**: the PWM *value* (sysfs `duty_cycle`) looked perfect (1500, 50 Hz) the whole time — the bug was the driver not *refreshing* the STM32, invisible in sysfs. The user's "the ESC keeps reconfiguring" observation was the key clue (repeated init = repeated signal dropout).
+- **Follow-up (future work)**: the fix drops the old ArduPilot-write watchdog; a proper host-heartbeat should replace it (see `docs/TODO.md`). Also note: cheap ESCs re-learn neutral from the signal at power-up, and per-unit neutral varies (may need per-channel `SERVOx_TRIM` tweak).
+- **See**: `docs/SESSION_HISTORY.md` Sessions 17 + 19.
+
+## Power module + Hailo HAT power budget (RESOLVED for now, 2026-07-19)
+
+- **Problem**: Pi 5 + Navio2 + Hailo HAT together need > 5 A. The Navio2 POWER port is a 6-pin JST-PA 2.0mm **analog** port — CAN / I2C power modules (e.g. PM02 V3.2) do NOT work on it. Original analog PM (3 A) and PM02 V3.2 (3 A) both insufficient.
+- **ArduPilot power module survey**: https://ardupilot.org/copter/docs/common-powermodule-landingpage.html — no analog module > 6 A with V/I measurement found that fits the Navio2 POWER port. Higher-current modules on that page are CAN-bus, which Navio2 does not expose on the POWER connector.
+- **Resolution**: functional split — Pololu 12A step-down (https://www.pololu.com/product/5571) supplies Pi 5 + HATs; original analog PM stays connected for voltage/current measurement only. Alternative: Matek BEC12S PRO (https://www.mateksys.com/?portfolio=bec12s-pro).
+- **Open**: verify the analog PM still measures correctly when it is no longer the primary current path (may need to stay in series with the load for current reading). Pending hardware test.
+- **Current boat state**: Hailo HAT removed; Pi 5 + Navio2 + sensors only needs ~2 A, so the existing 3 A analog PM is sufficient. The Pololu/Matek split-supply is for when the Hailo HAT is re-installed.
+- **See**: `docs/SESSION_HISTORY.md` Session 18 for the full investigation and links.
+
 ## Key Conventions
 
 - C++ standard: C++11 (`-std=c++11`)
@@ -89,6 +108,13 @@ sudo ./Build/LED
 1. **No post-hoc rationalization**: When asked "why did you do X?", state what you actually thought at the time — not a reconstructed plausible answer.
 2. **No telling the user what they want to hear**: Answer honestly, even if the answer makes you look wrong or incompetent. Do not be condescending, patronizing, obliging, or accommodating.
 3. **If you give a different method than the one you used, say why transparently**: "I used `ps` in my script because X, but suggested `top` to you because Y" — not hiding inconsistency.
+
+## Diagnostic Rules
+
+1. **Check parameters/config before hardware.** When a sensor is "missing" or "Not installed" in QGC, check enable flags, bus assignment, and type params in the parm file (`~/ardurover_work/boat_navio2.parm`) before investigating hardware, SPI, driver, or rebuild theories. The parm file is the highest-probability, lowest-cost check.
+2. **Stop when your own docs contradict your theory.** If you find prior documentation (SESSION_HISTORY, TODO, QUICK_START) that contradicts your current diagnosis, stop the theory immediately — don't keep going. That contradiction is the signal that you're on the wrong path.
+3. **No post-hoc rationalization applies mid-investigation too.** If you catch yourself constructing a narrative to justify a theory you're already committed to, step back. Apply this rule to yourself during the investigation, not only when answering "why did you do X?" after the fact.
+4. **Exhaust simple checks before invasive ones.** A one-line param edit comes before a hwdef edit + 6-8 minute rebuild. A `cat` of the parm file comes before an SPI speed analysis. Never propose an invasive change (rebuild, hwdef edit, driver patch) while a simple check remains untried.
 
 ## Validation Rule
 
