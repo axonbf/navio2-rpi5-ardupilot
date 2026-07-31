@@ -17,10 +17,11 @@ cd src && make -C Navio lib && make
 ```
 
 ```bash
-# Build ArduPilot Rover (on Pi, native aarch64)
-cd ~/ardupilot
-./waf configure --board navio2 --define=HAL_BARO_MS5611_I2C_BUS=1
-./waf build -j4
+# Build ArduPilot Rover (on Pi, native aarch64 — master tree in ~/ardupilot-master)
+cd ~/ardupilot-master
+./waf configure --board navio2 --toolchain=native   # reconfigure required after any hwdef.dat edit
+./waf rover
+# (old ~/ardupilot 4.6.3 tree is reference-only; master hwdef sets the baro bus, so no --define needed)
 ```
 
 ## Run/Validation Commands
@@ -141,6 +142,10 @@ sudo ./Build/LED
 ## Documentation Rules
 
 When making changes, update docs/ files following the rules in docs/README.md. Maintain cross-consistency between TECHNICAL_ARCHITECTURE.md, IMPLEMENTATION_PLAN.md, and TECHNICAL_SETUP.md.
+
+## Session Attribution Rule (required)
+
+Every `docs/SESSION_HISTORY.md` entry — and every TODO task you add or mark done — MUST record **which agent did the work: opencode or Claude, with the model** (e.g. `- Agent: Claude Code (Opus 4.8)` or `- Agent: opencode (glm-5.2:cloud)`). The repo git identity is fixed to `axonbf` (`mail@benjaminfernandez.info`) for **both** agents, so the commit author does **not** distinguish them — the session log is the only reliable record of who did what. Keep this on every new session and session-update.
 
 ## Propulsion & RPM notes (2026-07-19)
 
