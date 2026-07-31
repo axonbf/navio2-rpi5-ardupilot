@@ -147,6 +147,10 @@ When making changes, update docs/ files following the rules in docs/README.md. M
 
 Every `docs/SESSION_HISTORY.md` entry — and every TODO task you add or mark done — MUST record **which agent did the work: opencode or Claude, with the model** (e.g. `- Agent: Claude Code (Opus 4.8)` or `- Agent: opencode (glm-5.2:cloud)`). The repo git identity is fixed to `axonbf` (`mail@benjaminfernandez.info`) for **both** agents, so the commit author does **not** distinguish them — the session log is the only reliable record of who did what. Keep this on every new session and session-update.
 
+## Task-Writing Rule (required)
+
+Every TODO task must state its **assumption/reason (the "why")** and **what it depends on / triggers it** — never just a bare action. A task like "fix X" without the reasoning cannot be judged later and may be a false alarm. Example: task #23 said "fix `--serial2 /dev/ttyAMA0`" but **assumed** the RC was on that UART — it's actually on the Navio2 RC-input (RCIO), so the task was moot. Write each task so a reader with **no prior context** can see three things: **what** (the action), **why** (the assumption/evidence behind it), and **its dependency or trigger**. If a task's assumption turns out wrong, close it *with the reason*, don't just delete it.
+
 ## Propulsion & RPM notes (2026-07-19)
 
 - **Application**: fresh water; motors intended **fully submerged as thrusters** (the Roxxy outrunner construction has no shaft-out). Reverse already fixed (RCIO refresh).
