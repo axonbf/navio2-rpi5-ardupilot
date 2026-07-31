@@ -81,6 +81,12 @@ sudo ./Build/LED
 - **Follow-up (future work)**: the fix drops the old ArduPilot-write watchdog; a proper host-heartbeat should replace it (see `docs/TODO.md`). Also note: cheap ESCs re-learn neutral from the signal at power-up, and per-unit neutral varies (may need per-channel `SERVOx_TRIM` tweak).
 - **See**: `docs/SESSION_HISTORY.md` Sessions 17 + 19.
 
+## Boats & RC/serial wiring (2026-07-19)
+
+- **Two catamarans**: the **Pi 3** cat (well-tuned, working reference — H12 receiver over UART) and the **Pi 5** cat (this project, ready for water test). End goal: consolidate to the **Pi 5** cat only, adding **F9P GPS + Kogger depth sensor + Hailo-8**.
+- **Pi 5 RC path**: a normal receiver on the **Navio2 PPM / RC-input pins → RCIO** (`/sys/kernel/rcio/rcin/`), **not** the H12 UART. That's why RC works even though `/etc/default/ardurover` still has `TELEM2` / `--serial2 /dev/ttyAMA0` (H12-over-UART) uncommented — that serial points at a **non-existent device** (`/dev/ttyAMA0` doesn't exist on Pi 5; the real UART is `/dev/ttyAMA10` = `/dev/serial0`), so ardurover just skips serial2. **Harmless** (this is why task #23 was a false alarm).
+- **When adding F9P / Kogger**: reassign serials properly — Pi 5 UART is `/dev/ttyAMA10`; USB devices appear as `/dev/ttyACM0` (F9P) / `/dev/ttyUSB0` (Kogger). Fix the dead `serial2 /dev/ttyAMA0` at that point.
+
 ## Power module + Hailo HAT power budget (plan finalized 2026-07-19)
 
 - **Problem**: Pi 5 + Navio2 + Hailo HAT together peak ~6–8 A at 5 V. The Navio2 POWER port is a 6-pin JST-PA 2.0mm **analog** port whose BEC is only ~3 A, and its analog V/I sensing is low-precision. CAN/I2C power modules (e.g. PM02 V3.2) do NOT work on the analog POWER connector.
