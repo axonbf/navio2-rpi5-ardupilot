@@ -91,7 +91,14 @@ override it — doing so hijacks the GPS port).
 - **Remote/WireGuard:** `~/ros2_boat.sh` → `rmw_fastrtps_cpp` + domain 0 +
   `FASTRTPS_DEFAULT_PROFILES_FILE=~/fastdds_wg.xml`. The XML whitelists **wg0 only** (`10.0.0.2`) and
   sets the **initial peer = Pi `10.0.0.5`** → unicast discovery over the tunnel (no multicast needed).
-  The Pi/agent needed **no change** — it already announces on wg0.
+
+### Pi — agent wg unicast profile (symmetric discovery)
+`~/fastdds_wg_agent.xml` gives the agent the **initial peer = laptop `10.0.0.2`** (additive — keeps
+multicast + all interfaces, so LAN/local still work; **no** wg0 whitelist, or local access would
+break). Wired in via drop-in `xrce-agent.service.d/profile.conf`
+(`Environment=FASTRTPS_DEFAULT_PROFILES_FILE=/home/pi/fastdds_wg_agent.xml`). This makes discovery
+**symmetric** — either side can initiate over wg0. Verified: local Pi still sees 18 `/ap/` topics,
+and the laptop wg0-only path still gets topics + live GPS.
 
 ---
 
