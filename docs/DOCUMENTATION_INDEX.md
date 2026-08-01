@@ -40,7 +40,7 @@ Phase-by-phase work plan with current completion status and detailed next steps 
 Official Navio2 40-pin header mapping: RCIO SPI pins (GPIO16/19/20/21), RCIO SWD pins (GPIO12/13), sensor SPI buses.
 
 ### `ROS2_HUMBLE_DDS_PLAN.md`
-TODO #11 plan: native ROS 2 **Humble** on Pi OS via RoboStack (Step 1 done 2026-08-01) + ArduPilot native DDS (AP_DDS) + micro-ROS agent, with CycloneDDS unicast discovery for `ros2 topic list` over WireGuard. Includes the Humble-vs-Jazzy (aarch64 availability + laptop match), Pi-OS-vs-Ubuntu, and RoboStack-vs-Docker/source rationale. Step 2 (firmware rebuild) waits for after the lake test.
+TODO #11 **as-built (DONE 2026-08-01)**: native ROS 2 Humble + ArduPilot native DDS working. Documents the key finding that **UDP DDS is unusable on Navio2/Linux** (no AP_Networking backend → `get_ip_active()==0` spins forever) so the **serial-PTY XRCE transport** is used, that the agent forces **Fast-DDS + domain 0**, the full socat/agent/params setup, and laptop access at home (LAN) vs remote (WireGuard wg0-unicast via `~/ros2_boat.sh`).
 
 ### `SESSION_HISTORY.md`
 Full session log. The 2026-05-14 entry documents the RCIO root causes, diagnostic path, and fix in detail. Session 17 (2026-07-19) documents the open ArduPilot 4.8 boat-reverse regression. Session 18 (2026-07-19) documents the power-module + Hailo HAT power-budget investigation. The "Recent undiscussed topics" block at the end of Session 18 lists the live open topics a new session can pick up.

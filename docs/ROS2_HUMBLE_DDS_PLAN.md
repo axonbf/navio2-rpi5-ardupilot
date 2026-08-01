@@ -1,95 +1,115 @@
-# ROS 2 Humble + ArduPilot native DDS — plan (TODO #11)
+# ROS 2 Humble + ArduPilot native DDS — AS-BUILT (TODO #11)
 
-**Status:** **Steps 1 & 4 DONE on the Pi (2026-08-01)** — ROS 2 Humble + CycloneDDS-over-WireGuard
-installed & verified. **Step 3 (micro-ROS agent) deferred** — not in RoboStack (source build), and
-its version should match ArduPilot's XRCE-DDS client, which is fixed only when the DDS firmware is
-built (Step 2). **Step 2 (firmware rebuild) waits for AFTER the lake test**, then Step 3 → 5 → 6.
+**Status: ✅ WORKING (2026-08-01).** ArduPilot publishes its full native-DDS `/ap/...` topic set
+to ROS 2 Humble via a **serial (PTY) XRCE transport**. Verified with live data (`/ap/clock`,
+`/ap/navsat` GPS) locally on the Pi, from the laptop on the LAN, and from the laptop over
+**WireGuard** (wg0-only, so genuinely over the tunnel).
+**Author:** Claude Code (Opus 4.8), 2026-07-31 → completed 2026-08-01 — with user.
 
-**Enter the env on the Pi:** `source ~/ros2_env.sh` (sets conda env `ros_env`, `RMW=rmw_cyclonedds_cpp`,
-`ROS_DOMAIN_ID=42`, `CYCLONEDDS_URI=~/cyclonedds.xml`). Config file: `~/cyclonedds.xml` (wg0 unicast).
-**Author:** Claude Code (Opus 4.8), 2026-07-31 / updated 2026-08-01 — decided with user.
-**Goal:** native ROS 2 on the Pi 5, ArduPilot as a first-class ROS 2 node, and
-`ros2 topic list` / `echo` from the laptop **over WireGuard** (10.0.0.2 ↔ 10.0.0.5).
-
----
-
-## Decisions (the "why", so the plan isn't just actions)
-
-- **Distro = Humble, not Jazzy** (changed 2026-08-01).
-  RoboStack ships **no Jazzy build for the Pi's arch (linux-aarch64)** — zero `ros-jazzy-*`
-  packages; only `ros-humble-*` exists for aarch64. Jazzy on the Pi would need a source build
-  (hours) or Docker (rejected, see below). **Humble is available now AND matches the laptop's
-  native `/opt/ros/humble`** → perfect message-definition match, cleanest `ros2 topic echo`,
-  no cross-distro mismatch. For this project Jazzy's only extras (service introspection,
-  Python 3.12, +2 yr support to 2029) are nice-to-haves we don't need. ArduPilot AP_DDS
-  supports Humble fully.
-
-- **Keep Raspberry Pi OS (Debian 12 Bookworm) — do NOT reflash to Ubuntu.**
-  Ubuntu would make ROS 2 easy **but** the whole Navio2 stack — the hand-built **RCIO kernel
-  module** (6.12.93), the SPI/I2C/PPM **device-tree overlays**, RP1 bits, `config.txt` overlays,
-  and the **PWM-refresh fix** — is Pi-OS-kernel-specific and already **working**. Switching to
-  Ubuntu would force re-porting + re-validating that whole hardware stack (the hard part, already
-  solved). Net: Pi OS is *better* for Navio2.
-
-- **Install vehicle = RoboStack (conda), not official apt, not source build, not Docker.**
-  - Official `apt install ros-humble-*` (→ `/opt/ros/humble`) is **Ubuntu-only** — no Debian repo.
-  - Source build is heavy (multi-hour compile, incomplete Debian `rosdep`, rebuild on every
-    update). The `/opt/ros` layout isn't functionally needed.
-  - **Docker** rejected: its NAT bridge **breaks DDS multicast discovery**, working against the
-    cross-machine-over-WireGuard goal. Native networking is the point.
-  - **RoboStack** = ROS 2 packaged as conda packages → native ROS 2 Humble on Debian arm64,
-    isolated in an env, reversible. Large curated package set; anything missing is **built into
-    an overlay workspace on top** (so coverage is never a dead-end).
-  - Installed **batch-mode without `conda init`** → `.bashrc` untouched, so the boat's normal
-    shells and the `ardurover` systemd service are completely unaffected. Enter the env with
-    `source ~/miniforge3/etc/profile.d/conda.sh && conda activate ros_env`.
-
-- **Integration = native DDS (AP_DDS) + micro-ROS agent, not MAVROS.**
-  MAVROS is a MAVLink→ROS *translation* layer; its setpoint/RC streaming is rate-limited
-  (the old high-frequency-command pain). Native DDS makes ArduPilot a real ROS 2 participant —
-  lower latency, proper QoS, designed for ROS-native control rates. Tradeoff: DDS exposes a
-  curated (growing) subset vs MAVLink's full surface, so **keep the MAVLink link (UDP 14551) for
-  params/missions/QGC**. The **micro-ROS agent** is the required bridge that lifts ArduPilot's
-  XRCE-DDS client onto the full ROS 2 graph.
-
-- **Current `ardurover` build has NO DDS** (binary scan 2026-07-31 found no `AP_DDS`) →
-  Step 2 is a firmware rebuild with `--enable-dds`.
-
-- **`ros2 topic list` over WireGuard needs unicast DDS discovery.**
-  Default DDS discovery is **multicast**; WireGuard (point-to-point) doesn't pass multicast →
-  use **CycloneDDS with a static unicast peer list** (10.0.0.5 ↔ 10.0.0.2) + shared `ROS_DOMAIN_ID`.
-  Both ends must use the **same RMW** (CycloneDDS on Pi *and* laptop).
+## TL;DR — how to use it
+- **On the Pi:** `source ~/ros2_env.sh` → `ros2 topic list` (Fast-DDS, `ROS_DOMAIN_ID=0`).
+- **Laptop @ home (same LAN):** just works out of the box — the laptop's default Connext RMW
+  interoperates with the agent's Fast-DDS via LAN multicast on domain 0. No helper needed.
+- **Laptop remote / at the lake (only via WireGuard):** `source ~/ros2_boat.sh` → `ros2 topic list`.
+  This forces `rmw_fastrtps_cpp` + `~/fastdds_wg.xml` (wg0-only, unicast peer = Pi `10.0.0.5`).
+- Keep the **MAVLink link (UDP 14551)** for params/missions/QGC (tablet `10.0.0.6`, laptop `10.0.0.2`).
 
 ---
 
-## Steps
+## ⚠️ The big finding — UDP DDS does NOT work on native Navio2/Linux
+AP_DDS has two transports: **UDP** and **serial**. The obvious choice (agent on `udp4 -p 2019`,
+`DDS_ENABLE=1`, `DDS_UDP_PORT=2019`, `DDS_IP=127.0.0.1`) **initialises but never sends a byte.**
 
-| # | Step | What it does | Verify | State |
-|---|------|--------------|--------|-------|
-| 1 | **RoboStack → ROS 2 Humble on the Pi** | Miniforge (batch, no `.bashrc`); `mamba create -n ros_env`; channels conda-forge + robostack-staging; `mamba install ros-humble-ros-base`. | `ros2` CLI + DDS pub/sub loopback | ✅ **DONE 2026-08-01** |
-| 2 | **Rebuild `ardurover` with native DDS** | In `~/ardupilot-master`: `./waf configure --board=navio2 --toolchain=native --enable-dds` → `./waf rover`. Set `DDS_ENABLE=1` (+ transport/port). | `strings .../bin/ardurover \| grep -i AP_DDS` non-empty; boat still arms/drives | 🚤 **after lake** |
-| 3 | **micro-ROS agent on the Pi** | XRCE-DDS agent bridging ArduPilot → ROS 2 graph. **Not in RoboStack** → source-build eProsima `Micro-XRCE-DDS-Agent`. Build the version matching ArduPilot's XRCE-DDS client (known after Step 2). | agent launches & listens; later `ros2 node list` shows the AP node | ⏸️ **deferred → after Step 2** |
-| 4 | **DDS discovery over WireGuard** | Installed `ros-humble-rmw-cyclonedds-cpp`; wrote `~/cyclonedds.xml` (bind `wg0`, no multicast, static unicast peers `10.0.0.5 ↔ 10.0.0.2`); `ROS_DOMAIN_ID=42`. | ✅ CycloneDDS loopback over wg0 config delivered a message | ✅ **DONE 2026-08-01** |
-| 5 | **Laptop side** | Laptop **already has native ROS 2 Humble** (`/opt/ros/humble`) → just add `rmw_cyclonedds` + identical CycloneDDS config + same domain ID. | laptop sees the Pi over WG | small |
-| 6 | **Verify end-to-end over WireGuard** | From laptop: `ros2 topic list`, `ros2 topic echo /ap/battery`. Keep MAVLink 14551 for params/missions. | live topics stream laptop←Pi over `wg0` | needs #2 |
+Root cause (from `libraries/AP_DDS/AP_DDS_Client.cpp::main_loop`):
+```cpp
+#if AP_DDS_UDP_ENABLED && !AP_NETWORKING_BACKEND_SITL
+    if (!is_using_serial) {
+        if (AP::network().get_ip_active() == 0) { hal.scheduler->delay(1000); continue; } // spins forever
+    }
+#endif
+```
+`get_ip_active()` returns `backend ? backend->activeSettings.ip : 0`. AP_Networking's backends are
+**CHIBIOS / PPP / SITL / SITL_TUN only — there is no generic-Linux backend**, so on the native
+Navio2 build there is **no backend at all** (confirmed: zero `NET:` boot messages even with
+`NET_ENABLE=1`). Therefore `get_ip_active()` is permanently 0 and the UDP DDS loop never reaches
+ping/session. `NET_ENABLE` can't help — nothing to activate. (SITL works because it compiles the
+check *out* via `AP_NETWORKING_BACKEND_SITL`.)
 
-**Working rule:** build + test each step in isolation before moving on (incremental-validation
-rule). Steps 1/3/4 are isolated conda-env work and do **not** touch the boat; only Step 2 changes
-firmware and waits for after the lake test.
+**The serial transport skips that check** (`if (!is_using_serial)`), so **serial is the only
+working AP_DDS transport on Navio2/Linux.** On a same-machine setup we bridge ArduPilot ↔ agent
+over a **socat PTY pair** (memory-speed, so no baud limit; XRCE topic set is identical to UDP).
 
-## Facts checked
-- 2026-07-31 — Disk: 20 GB free; OS Debian 12 Bookworm arm64; no Docker; `ardurover` has no AP_DDS.
-- 2026-08-01 — RoboStack has **no Jazzy for aarch64**, only Humble → distro = Humble.
-- 2026-08-01 — Laptop is Ubuntu 22.04 with **native ROS 2 Humble already installed** (`/opt/ros/humble`).
-- 2026-08-01 — Step 1 verified on the Pi: `ros2` CLI works, DDS pub/sub loopback delivered a message;
-  `.bashrc` clean; disk 17 GB free after install.
-- 2026-08-01 — Step 4 done: `rmw_cyclonedds` installed; `~/cyclonedds.xml` (wg0 unicast) written &
-  verified via loopback; helper `~/ros2_env.sh` created.
-- 2026-08-01 — micro-ROS agent (Step 3) is **not** in RoboStack aarch64 → source build required;
-  deferred until after Step 2 so the agent version matches ArduPilot's XRCE-DDS client.
+## ⚠️ DDS vendor = Fast-DDS (not CycloneDDS)
+The **micro-XRCE-DDS agent is a Fast-DDS program** (baked in, not configurable). It republishes the
+`/ap/...` topics on **Fast-DDS**, so **every ROS 2 participant must use Fast-DDS + the agent's
+domain (0)** to see them. The earlier CycloneDDS/domain-42 plan was made before the agent existed
+and is **abandoned** — `~/ros2_env.sh` now sets `rmw_fastrtps_cpp` + domain 0. (`~/cyclonedds.xml`
+is a harmless leftover.)
 
-## Open items to resolve during execution
-- Step 2 (after lake): rebuild `ardurover --enable-dds`; note the bundled Micro-XRCE-DDS client version.
-- Step 3: source-build the matching `Micro-XRCE-DDS-Agent`; wire the ardurover↔agent transport (serial/UDP).
-- Step 5: on the laptop add `rmw_cyclonedds` + the same `cyclonedds.xml`/domain (mind the 98%-full disk).
-- Which `/ap/...` topics this ArduPilot version publishes/subscribes (feature coverage).
+---
+
+## As-built setup
+
+### Pi — packages (RoboStack, isolated conda env `ros_env`)
+Miniforge batch-installed (no `conda init`, `.bashrc` untouched). `ros-humble-ros-base` +
+`ros-humble-rmw-cyclonedds-cpp` (unused now). Enter via `source ~/ros2_env.sh`.
+
+### Pi — DDS firmware
+`~/ardupilot-master` rebuilt with **`--enable-DDS`** (waf flag is capital `DDS`); needs the
+`microxrceddsgen` codegen (built from `ardupilot/Micro-XRCE-DDS-Gen`, needs a JDK) on `PATH`.
+`/usr/bin/ardurover` is a **real copy** of `build/navio2/bin/ardurover` (was a symlink into the
+build dir — decoupled so rebuilds don't silently change the live binary). Client version = **v2.4.1**.
+
+### Pi — the agent (source-built)
+eProsima **Micro-XRCE-DDS-Agent v2.4.2** in `~/microxrce-agent/` (superbuild; had to patch its
+`CMakeLists.txt` `_fastdds_tag 2.12.x` → `v2.12.2`, a removed branch). Runs as a **systemd service
+in serial mode**.
+
+### Pi — the transport chain (3 systemd units)
+1. **`dds-pty.service`** — `socat pty,raw,echo=0,perm=0666,link=/dev/ttyDDS0  pty,raw,echo=0,perm=0666,link=/dev/ttyDDS1`
+   (⚠️ **no `-d0`** — invalid flag). Creates the virtual serial pair, world-rw (ArduPilot=root, agent=pi).
+2. **`xrce-agent.service`** — `MicroXRCEAgent serial --dev /dev/ttyDDS1 -b 115200`
+   (`User=pi`, `LD_LIBRARY_PATH=~/microxrce-agent/lib`, `ROS_DOMAIN_ID=0`, `After/Requires=dds-pty`).
+3. **`ardurover.service.d/dds-pty.conf`** drop-in — `After=/Wants=dds-pty.service`.
+Both `dds-pty` and `xrce-agent` are **enabled** (auto-start at boot).
+
+### Pi — ArduPilot params + serial mapping
+- `/etc/default/ardurover`: `TELEM_DDS="--serial5 /dev/ttyDDS0"`, `ARDUPILOT_OPTS="$TELEM1 $TELEM2 $TELEM_DDS"`.
+  ⚠️ **NO inline `#` comments** in this file — `EnvironmentFile` leaks them as stray argv words that
+  halt ArduPilot's getopt (this silently dropped `--serial2` and corrupted QGC param sync earlier).
+- Params (set in QGC, they're stored — the `--defaults` file can't override existing ones):
+  `DDS_ENABLE=1`, `SERIAL5_PROTOCOL=45` (DDS-XRCE), `SERIAL5_BAUD=115`.
+- Boot message confirms: **`DDS: Using serial`** (not "Using UDP").
+
+### Telemetry (MAVLink, separate from DDS)
+`--serial1 udp:10.0.0.6:14551` (tablet), `--serial2 udp:10.0.0.2:14551` (laptop). serial3=GPS (don't
+override it — doing so hijacks the GPS port).
+
+### Laptop
+- **Home:** default env (native `/opt/ros/humble`, `RMW=rmw_connextdds`, domain 0) — Connext↔Fast-DDS
+  interoperate over LAN multicast. Nothing to configure.
+- **Remote/WireGuard:** `~/ros2_boat.sh` → `rmw_fastrtps_cpp` + domain 0 +
+  `FASTRTPS_DEFAULT_PROFILES_FILE=~/fastdds_wg.xml`. The XML whitelists **wg0 only** (`10.0.0.2`) and
+  sets the **initial peer = Pi `10.0.0.5`** → unicast discovery over the tunnel (no multicast needed).
+  The Pi/agent needed **no change** — it already announces on wg0.
+
+---
+
+## Verification (2026-08-01)
+- Pi: agent logs `session established`; `ros2 topic list` shows the full `/ap/*` set; `/ap/clock`
+  live, `/ap/navsat` at 5 Hz.
+- Laptop @ home (LAN): same topic list + live GPS.
+- Laptop **wg0-only** (proves WireGuard): full topic list + live `/ap/navsat` GPS over the tunnel.
+
+## Retained decisions (still valid)
+- **Humble** (RoboStack has no Jazzy for aarch64; matches the laptop's `/opt/ros/humble`).
+- **Keep Raspberry Pi OS** (Navio2/RCIO kernel stack works; Ubuntu would force re-porting it).
+- **Native DDS, not MAVROS** (MAVROS setpoint/RC rate-limited — the user's original pain).
+
+## Loose ends
+- **Reboot-robustness:** the socat fix landed *after* the last reboot, so a clean boot hasn't been
+  re-verified. Possible race: ArduPilot may open `/dev/ttyDDS0` before socat creates it (DDS thread
+  then exits). If a reboot shows no session, add an `ExecStartPre` wait-for-`/dev/ttyDDS0` to
+  `ardurover` (or make `dds-pty` report ready only once the link exists).
+- `NET_ENABLE=1` was set while chasing the UDP path; it's **inert** on Navio2 (no backend) — safe to
+  leave or revert to 0.
