@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Agent-side (Pi) Fast-DDS profile: additive unicast peer to the laptop over wg0.
+     Keeps multicast + all interfaces (so LAN/local still work); NO interface whitelist
+     (that would break local access). Deploy to ~/fastdds_wg_agent.xml. -->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <participant profile_name="agent_wg" is_default_profile="true">
+      <rtps>
+        <builtin>
+          <initialPeersList>
+            <locator>
+              <udpv4>
+                <address>10.0.0.2</address>
+              </udpv4>
+            </locator>
+          </initialPeersList>
+        </builtin>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

@@ -1,0 +1,12 @@
+[Unit]
+Description=DDS virtual serial pair (ArduPilot <-> micro-XRCE agent)
+Before=ardurover.service xrce-agent.service
+
+[Service]
+# NOTE: no "-d0" — that is an invalid socat flag and makes the unit fail.
+ExecStart=/usr/bin/socat pty,raw,echo=0,perm=0666,link=/dev/ttyDDS0 pty,raw,echo=0,perm=0666,link=/dev/ttyDDS1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

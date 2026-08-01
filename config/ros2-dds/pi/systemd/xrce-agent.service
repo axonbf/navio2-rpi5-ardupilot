@@ -1,0 +1,15 @@
+[Unit]
+Description=Micro-XRCE-DDS Agent (ArduPilot DDS bridge, serial)
+After=dds-pty.service
+Requires=dds-pty.service
+
+[Service]
+User=pi
+Environment=LD_LIBRARY_PATH=/home/pi/microxrce-agent/lib
+Environment=ROS_DOMAIN_ID=0
+ExecStart=/home/pi/microxrce-agent/bin/MicroXRCEAgent serial --dev /dev/ttyDDS1 -b 115200
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

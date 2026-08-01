@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Laptop-side Fast-DDS profile for REMOTE access over WireGuard.
+     Locks ROS 2 to the wg0 interface only (10.0.0.2) and sets the Pi (10.0.0.5)
+     as the unicast discovery peer. Deploy to ~/fastdds_wg.xml; load via ros2_boat.sh
+     (FASTRTPS_DEFAULT_PROFILES_FILE). At home on the LAN this is not needed. -->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>wg_udp</transport_id>
+        <type>UDPv4</type>
+        <interfaceWhiteList>
+          <address>10.0.0.2</address>
+        </interfaceWhiteList>
+      </transport_descriptor>
+    </transport_descriptors>
+    <participant profile_name="wg_peer" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>wg_udp</transport_id>
+        </userTransports>
+        <useBuiltinTransports>false</useBuiltinTransports>
+        <builtin>
+          <metatrafficUnicastLocatorList>
+            <locator><udpv4><address>10.0.0.2</address></udpv4></locator>
+          </metatrafficUnicastLocatorList>
+          <initialPeersList>
+            <locator><udpv4><address>10.0.0.5</address></udpv4></locator>
+          </initialPeersList>
+        </builtin>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>
