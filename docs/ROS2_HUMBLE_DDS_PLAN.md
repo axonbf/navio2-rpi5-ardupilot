@@ -106,10 +106,13 @@ override it — doing so hijacks the GPS port).
 - **Keep Raspberry Pi OS** (Navio2/RCIO kernel stack works; Ubuntu would force re-porting it).
 - **Native DDS, not MAVROS** (MAVROS setpoint/RC rate-limited — the user's original pain).
 
-## Loose ends
-- **Reboot-robustness:** the socat fix landed *after* the last reboot, so a clean boot hasn't been
-  re-verified. Possible race: ArduPilot may open `/dev/ttyDDS0` before socat creates it (DDS thread
-  then exits). If a reboot shows no session, add an `ExecStartPre` wait-for-`/dev/ttyDDS0` to
-  `ardurover` (or make `dds-pty` report ready only once the link exists).
-- `NET_ENABLE=1` was set while chasing the UDP path; it's **inert** on Navio2 (no backend) — safe to
-  leave or revert to 0.
+## Reboot-robustness — ✅ VERIFIED (2026-08-01)
+Survives a clean reboot with **no manual steps**: `dds-pty`, `xrce-agent`, `ardurover` all auto-start
+(enabled), the PTYs appear, the agent logs `session established`, and `/ap/*` topics + live
+`/ap/navsat` GPS were confirmed from the laptop after the boot. The feared socat/ArduPilot PTY race
+did **not** occur (the `After=dds-pty` ordering + the agent's `Restart=` cover it). If it ever does
+regress, add an `ExecStartPre` wait-for-`/dev/ttyDDS0` to `ardurover`.
+
+## Notes
+- `NET_ENABLE=1` was set while chasing the (dead) UDP path; it's **inert** on Navio2 (no backend) —
+  safe to leave or revert to 0.
