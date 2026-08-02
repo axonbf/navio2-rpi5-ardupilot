@@ -7,6 +7,13 @@ Full rationale + the "why" is in [`docs/ROS2_HUMBLE_DDS_PLAN.md`](../../docs/ROS
 (Fast-DDS) —*ROS 2 DDS*→ `/ap/...` topics. UDP DDS does **not** work on Navio2/Linux (no
 AP_Networking backend), so the **serial transport** is used. Everything is **Fast-DDS, domain 0**.
 
+> **`ardupilot_msgs` required.** The AP-specific types (`ArmMotors`, `ModeSwitch`, `Status`,
+> `GlobalPosition`, …) aren't in a released package — build them into a colcon workspace `~/ap_ws`
+> (see `docs/ROS2_HUMBLE_DDS_PLAN.md` / the install notes). **Both helper scripts source it**
+> (`source ~/ap_ws/install/setup.bash`). On the **Pi** the overlay must be sourced **after**
+> `conda activate ros_env` (RoboStack re-sources base ROS on activate and would wipe an earlier
+> overlay). Standard-message topics (`/ap/navsat`, `/ap/cmd_vel`, …) work without it.
+
 ## Pi (`pi/`)
 | File | Deploy to |
 |---|---|

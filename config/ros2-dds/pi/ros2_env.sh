@@ -5,6 +5,9 @@
 #   Usage:  source ~/ros2_env.sh
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate ros_env
+# ardupilot_msgs overlay (colcon ws ~/ap_ws) — MUST come AFTER conda activate,
+# or RoboStack's activation re-sources base ROS and wipes the overlay.
+source ~/ap_ws/install/setup.bash 2>/dev/null
 export ROS_DOMAIN_ID=0                         # must match the xrce-agent service
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp      # match the agent's DDS (Fast-DDS)
 unset CYCLONEDDS_URI                            # not used with Fast-DDS

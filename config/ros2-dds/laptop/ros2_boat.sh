@@ -3,6 +3,7 @@
 # Agent = Fast-DDS on domain 0; this forces wg0-only unicast discovery to the Pi.
 #   Usage:  source ~/ros2_boat.sh   ->   ros2 topic list
 source /opt/ros/humble/setup.bash
+source ~/ap_ws/install/setup.bash 2>/dev/null   # ardupilot_msgs overlay (build ~/ap_ws first)
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export ROS_DOMAIN_ID=0
 export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/fastdds_wg.xml
