@@ -87,6 +87,15 @@ sudo ./Build/LED
 - **Pi 5 RC path**: a normal receiver on the **Navio2 PPM / RC-input pins → RCIO** (`/sys/kernel/rcio/rcin/`), **not** the H12 UART. That's why RC works even though `/etc/default/ardurover` still has `TELEM2` / `--serial2 /dev/ttyAMA0` (H12-over-UART) uncommented — that serial points at a **non-existent device** (`/dev/ttyAMA0` doesn't exist on Pi 5; the real UART is `/dev/ttyAMA10` = `/dev/serial0`), so ardurover just skips serial2. **Harmless** (this is why task #23 was a false alarm).
 - **When adding F9P / Kogger**: reassign serials properly — Pi 5 UART is `/dev/ttyAMA10`; USB devices appear as `/dev/ttyACM0` (F9P) / `/dev/ttyUSB0` (Kogger). Fix the dead `serial2 /dev/ttyAMA0` at that point.
 
+## ROS 2 / native DDS (WORKING — 2026-08-01)
+
+- **ArduPilot native DDS is live**: `/ap/...` topics + services on ROS 2 Humble. As-built + rationale in **`docs/ROS2_HUMBLE_DDS_PLAN.md`**; deployed config version-controlled in **`config/ros2-dds/`**; usable topic/service/param reference in **`docs/ROS2_AP_GUIDE.html`**.
+- **Transport = serial (socat PTY), NOT UDP.** AP_DDS-over-UDP is **dead on native Navio2/Linux** — `main_loop` blocks on `AP::network().get_ip_active()!=0`, but Navio2 has **no AP_Networking backend** (only CHIBIOS/PPP/SITL exist), so it never sends; `NET_ENABLE` can't help. The **serial** transport skips that check → bridged same-machine over a socat PTY pair (`/dev/ttyDDS0↔ttyDDS1`), agent in `serial` mode. Params: `DDS_ENABLE=1  SERIAL5_PROTOCOL=45  SERIAL5_BAUD=115` + `--serial5 /dev/ttyDDS0`.
+- **All ROS 2 must be Fast-DDS + `ROS_DOMAIN_ID=0`** (the micro-XRCE agent is a Fast-DDS program). The earlier CycloneDDS/domain-42 plan is abandoned.
+- **Envs:** Pi `source ~/ros2_env.sh`; laptop @home = default env works (Connext↔Fast-DDS over LAN); laptop remote (WireGuard) `source ~/ros2_boat.sh` (wg0 unicast, `~/fastdds_wg.xml`). AP-specific types (`ardupilot_msgs`) built in colcon ws `~/ap_ws` → `source ~/ap_ws/install/setup.bash`.
+- **Services:** `arm_motors`, `mode_switch` (GUIDED=15 for `cmd_vel`), `prearm_check`, `get/set_parameters`. **The armability *reason* is NOT on `/ap`** — `prearm_check` returns a generic "Not Armable"; the "PreArm: …" text is MAVLink STATUSTEXT (read in QGC).
+- **3 systemd units** (enabled, reboot-verified): `dds-pty` (socat), `xrce-agent` (serial), ardurover drop-in `After=dds-pty`. `⚠️ /etc/default/ardurover`: **no inline `#` comments** (they leak as stray argv and break parsing).
+
 ## Power module + Hailo HAT power budget (plan finalized 2026-07-19)
 
 - **Problem**: Pi 5 + Navio2 + Hailo HAT together peak ~6–8 A at 5 V. The Navio2 POWER port is a 6-pin JST-PA 2.0mm **analog** port whose BEC is only ~3 A, and its analog V/I sensing is low-precision. CAN/I2C power modules (e.g. PM02 V3.2) do NOT work on the analog POWER connector.

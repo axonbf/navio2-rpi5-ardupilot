@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArduPilot ROS 2 (/ap) Reference — Navio2 + Pi 5</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.5;
+         max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
+  h1 { font-size: 1.7rem; } h2 { margin-top: 2rem; border-bottom: 2px solid #8884; padding-bottom: .2rem; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { background: #8882; padding: .1em .35em; border-radius: 4px; }
+  pre { background: #8881; padding: .8rem; border-radius: 8px; overflow-x: auto; border: 1px solid #8883; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .93rem; display: block; overflow-x: auto; }
+  th, td { border: 1px solid #8884; padding: .4rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #8882; }
+  .r { color: #2e7d32; font-weight: 600; } .w { color: #c62828; font-weight: 600; }
+  @media (prefers-color-scheme: dark){ .r{color:#7bd88f} .w{color:#ff8a80} }
+  .note { background: #ffd7002a; border-left: 4px solid #f0b400; padding: .6rem .8rem; border-radius: 4px; margin: .8rem 0; }
+  .tag { font-size: .78rem; padding: .1em .5em; border-radius: 10px; background:#8883; }
+</style>
+</head>
+<body>
+
+<h1>ArduPilot native-DDS (<code>/ap</code>) reference</h1>
+<p>Reference for driving this boat (ArduRover on Navio2 + Pi 5) from ROS 2 over the native
+XRCE-DDS bridge. Setup/rationale: see <code>docs/ROS2_HUMBLE_DDS_PLAN.md</code> and
+<code>config/ros2-dds/</code>.</p>
+
+<h2>Connect</h2>
+<p>Everything is <strong>Fast-DDS on <code>ROS_DOMAIN_ID=0</code></strong> (the agent decides this).
+The AP-specific types need <code>ardupilot_msgs</code> built (see the DDS plan doc / install notes).</p>
+<pre>
+# On the Pi:            source ~/ros2_env.sh      &&  source ~/ap_ws/install/setup.bash
+# Laptop @ home (LAN):  works with the default env (+ source ~/ap_ws/install/setup.bash)
+# Laptop remote (wg):   source ~/ros2_boat.sh     &&  source ~/ap_ws/install/setup.bash
+ros2 topic list ; ros2 service list
+</pre>
+
+<h2>Topics</h2>
+<p><span class="r">R</span> = ArduPilot publishes (you subscribe) &nbsp;·&nbsp;
+   <span class="w">W</span> = you publish (command the boat). Confirm any type with
+   <code>ros2 topic type &lt;name&gt;</code> and fields with <code>ros2 interface show &lt;type&gt;</code>.</p>
+<table>
+<tr><th>Topic</th><th>Dir</th><th>Type</th><th>Use</th></tr>
+<tr><td><code>/ap/navsat</code></td><td class="r">R</td><td>sensor_msgs/NavSatFix</td><td>GPS lat/lon/alt + fix status</td></tr>
+<tr><td><code>/ap/pose/filtered</code></td><td class="r">R</td><td>geometry_msgs/PoseStamped</td><td>EKF position + orientation (local frame)</td></tr>
+<tr><td><code>/ap/twist/filtered</code></td><td class="r">R</td><td>geometry_msgs/TwistStamped</td><td>Velocity (linear + angular)</td></tr>
+<tr><td><code>/ap/geopose/filtered</code></td><td class="r">R</td><td>geographic_msgs/GeoPoseStamped</td><td>Global pose (lat/lon + orientation)</td></tr>
+<tr><td><code>/ap/gps_global_origin/filtered</code></td><td class="r">R</td><td>geographic_msgs/GeoPointStamped</td><td>EKF origin</td></tr>
+<tr><td><code>/ap/imu/experimental/data</code></td><td class="r">R</td><td>sensor_msgs/Imu</td><td>Accel + gyro</td></tr>
+<tr><td><code>/ap/battery</code></td><td class="r">R</td><td>sensor_msgs/BatteryState</td><td>Voltage / current / %</td></tr>
+<tr><td><code>/ap/status</code></td><td class="r">R</td><td>ardupilot_msgs/Status</td><td>Armed flag, flight mode, flags (see armability note)</td></tr>
+<tr><td><code>/ap/rc</code></td><td class="r">R</td><td>(check <code>ros2 topic type</code>)</td><td>RC channel inputs</td></tr>
+<tr><td><code>/ap/joy</code></td><td class="r">R</td><td>sensor_msgs/Joy</td><td>RC as a joystick msg</td></tr>
+<tr><td><code>/ap/airspeed</code></td><td class="r">R</td><td>(check <code>ros2 topic type</code>)</td><td>Airspeed (if sensor present)</td></tr>
+<tr><td><code>/ap/tf</code> · <code>/ap/tf_static</code></td><td class="r">R</td><td>tf2_msgs/TFMessage</td><td>Coordinate frames (for tf2 / nav2)</td></tr>
+<tr><td><code>/ap/clock</code></td><td class="r">R</td><td>rosgraph_msgs/Clock</td><td>Time source</td></tr>
+<tr><td><code>/ap/time</code></td><td class="r">R</td><td>builtin_interfaces/Time</td><td>Vehicle time</td></tr>
+<tr><td><code>/ap/cmd_vel</code></td><td class="w">W</td><td>geometry_msgs/TwistStamped</td><td><strong>Velocity/steering command</strong> — the main autonomy input (GUIDED mode)</td></tr>
+<tr><td><code>/ap/cmd_gps_pose</code></td><td class="w">W</td><td>ardupilot_msgs/GlobalPosition</td><td>Command a global position/attitude</td></tr>
+<tr><td><code>/ap/goal_lla</code></td><td class="w">W</td><td>geographic_msgs/GeoPointStamped</td><td>"Go to this lat/lon/alt" goal</td></tr>
+</table>
+
+<h2>Services</h2>
+<table>
+<tr><th>Service</th><th>Type</th><th>Request → Response</th><th>Example</th></tr>
+<tr><td><code>/ap/prearm_check</code></td><td>std_srvs/Trigger</td><td>() → <code>bool success, string message</code></td>
+    <td><code>ros2 service call /ap/prearm_check std_srvs/srv/Trigger "{}"</code></td></tr>
+<tr><td><code>/ap/arm_motors</code></td><td>ardupilot_msgs/ArmMotors</td><td><code>bool arm</code> → <code>bool result</code></td>
+    <td><code>ros2 service call /ap/arm_motors ardupilot_msgs/srv/ArmMotors "{arm: true}"</code></td></tr>
+<tr><td><code>/ap/mode_switch</code></td><td>ardupilot_msgs/ModeSwitch</td><td><code>uint8 mode</code> → <code>bool status, uint8 curr_mode</code></td>
+    <td><code>ros2 service call /ap/mode_switch ardupilot_msgs/srv/ModeSwitch "{mode: 15}"</code></td></tr>
+<tr><td><code>/ap/get_parameters</code></td><td>rcl_interfaces/GetParameters</td><td><code>string[] names</code> → values</td>
+    <td><code>ros2 service call /ap/get_parameters rcl_interfaces/srv/GetParameters "{names: ['CRUISE_SPEED']}"</code></td></tr>
+<tr><td><code>/ap/set_parameters</code></td><td>rcl_interfaces/SetParameters</td><td><code>Parameter[]</code> → results</td>
+    <td>set a param by name/value</td></tr>
+<tr><td><code>/ap/experimental/takeoff</code></td><td>ardupilot_msgs/Takeoff</td><td>copter-only</td><td>— (not for rover)</td></tr>
+</table>
+
+<p><strong>Rover modes (for <code>mode_switch</code>):</strong>
+MANUAL=0, ACRO=1, STEERING=3, HOLD=4, LOITER=5, FOLLOW=6, SIMPLE=7, AUTO=10, RTL=11, SMART_RTL=12,
+<strong>GUIDED=15</strong> (use for <code>cmd_vel</code>), INITIALISING=16.</p>
+
+<h2>Actions</h2>
+<p>AP_DDS currently exposes <strong>topics + services only</strong> — no ROS 2 <em>actions</em>.
+Goal-style behaviour is done via the <code>/ap/goal_lla</code> / <code>/ap/cmd_gps_pose</code> topics.</p>
+
+<h2>Parameters</h2>
+<p>Two ways: the ROS 2 param <em>services</em> above (<code>get/set_parameters</code>, by name), or QGC
+(full list). The DDS transport itself is configured by these ArduPilot params:</p>
+<table>
+<tr><th>Param</th><th>Value</th><th>Meaning</th></tr>
+<tr><td><code>DDS_ENABLE</code></td><td>1</td><td>Enable AP_DDS</td></tr>
+<tr><td><code>SERIAL5_PROTOCOL</code></td><td>45</td><td>DDS-XRCE on serial5 (→ <code>/dev/ttyDDS0</code>)</td></tr>
+<tr><td><code>SERIAL5_BAUD</code></td><td>115</td><td>115200 (nominal on a PTY)</td></tr>
+<tr><td><code>DDS_DOMAIN_ID</code></td><td>0</td><td>ROS domain (must match your env)</td></tr>
+<tr><td><code>DDS_UDP_PORT</code>, <code>DDS_IP*</code></td><td>—</td><td>UDP transport (NOT used — dead on Navio2/Linux; see plan doc)</td></tr>
+</table>
+
+<h2>Common recipes</h2>
+<pre>
+# Read GPS / state
+ros2 topic echo /ap/navsat
+ros2 topic echo /ap/status          # needs ardupilot_msgs
+
+# Drive it (GUIDED)
+ros2 service call /ap/mode_switch ardupilot_msgs/srv/ModeSwitch "{mode: 15}"
+ros2 service call /ap/arm_motors  ardupilot_msgs/srv/ArmMotors  "{arm: true}"
+ros2 topic pub /ap/cmd_vel geometry_msgs/msg/TwistStamped \
+    "{twist: {linear: {x: 0.5}, angular: {z: 0.2}}}" -r 10
+ros2 service call /ap/arm_motors  ardupilot_msgs/srv/ArmMotors  "{arm: false}"
+
+# Params
+ros2 service call /ap/get_parameters rcl_interfaces/srv/GetParameters "{names: ['CRUISE_SPEED']}"
+</pre>
+
+<div class="note">
+<strong>⚠️ Armability — what <code>/ap</code> can and can't tell you.</strong>
+<code>/ap/prearm_check</code> returns only a <em>generic</em> <code>success: true/false</code> +
+<code>"Vehicle is Not Armable"</code>. <code>/ap/status</code> gives the armed flag / mode.
+<strong>The detailed reason (e.g. "PreArm: GPS: waiting for 3D fix") is NOT exposed over <code>/ap</code></strong>
+— it's a MAVLink <code>STATUSTEXT</code>, so read it in <strong>QGC</strong> (or over the MAVLink link).
+Armable becomes true when the enabled <code>ARMING_CHECK</code> items pass (GPS lock, RC not in
+failsafe, EKF healthy, battery OK …).
+</div>
+
+<div class="note">
+<strong>Safety.</strong> Arming makes the boat <em>live</em>. On the bench with the ESC/motors powered,
+<code>arm</code> + a mode can spin the props. Keep it disarmed / props clear until you mean it.
+</div>
+
+</body>
+</html>

@@ -39,6 +39,9 @@ Phase-by-phase work plan with current completion status and detailed next steps 
 ### `NAVIO2_PINOUT_REFERENCE.md`
 Official Navio2 40-pin header mapping: RCIO SPI pins (GPIO16/19/20/21), RCIO SWD pins (GPIO12/13), sensor SPI buses.
 
+### `ROS2_AP_GUIDE.html`
+Usable reference (open in a browser) for driving the boat from ROS 2: all `/ap/...` topics (read/write + types), services (`arm_motors`, `mode_switch`, `prearm_check`, params) with example `ros2 service call` commands, rover mode numbers, DDS params, common recipes, and the armability/safety notes.
+
 ### `ROS2_HUMBLE_DDS_PLAN.md`
 TODO #11 **as-built (DONE 2026-08-01)**: native ROS 2 Humble + ArduPilot native DDS working. Documents the key finding that **UDP DDS is unusable on Navio2/Linux** (no AP_Networking backend → `get_ip_active()==0` spins forever) so the **serial-PTY XRCE transport** is used, that the agent forces **Fast-DDS + domain 0**, the full socat/agent/params setup, and laptop access at home (LAN) vs remote (WireGuard wg0-unicast via `~/ros2_boat.sh`).
 
