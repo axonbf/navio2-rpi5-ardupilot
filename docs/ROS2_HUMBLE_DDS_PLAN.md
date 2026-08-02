@@ -102,6 +102,31 @@ and the laptop wg0-only path still gets topics + live GPS.
 
 ---
 
+## Gamepad / joystick → /ap/joy (QoS bridge)
+
+The `joy_node` publisher uses RELIABLE/VOLATILE QoS, but ArduPilot's `/ap/joy` subscription requires BEST_EFFORT/VOLATILE. A direct `--remap` doesn't work because the QoS doesn't match and DDS drops the data at the subscription endpoint.
+
+**Solution**: `config/ros2-dds/joy_relay.py` — a small rclpy node that:
+- Subscribes to `/joy` (RELIABLE, matching joy_node)
+- Publishes to `/ap/joy` (BEST_EFFORT/VOLATILE, matching ArduPilot)
+- Strips to 4 axes (ArduPilot requires `axes_size >= 4`)
+- Remaps axes for skid-steer: `[-gamepad[2], gamepad[0], gamepad[1], gamepad[3]]` (steering inverted)
+
+Run on the Pi alongside joy_node:
+```bash
+# Terminal 1: gamepad plugged into Pi
+ros2 run joy joy_node
+# Terminal 2:
+source ~/ros2_env.sh && source ~/ap_ws/install/setup.bash
+python3 ~/joy_relay.py
+```
+
+The gamepad can also be on the laptop — both are in domain 0 and Connext↔Fast-DDS interop over LAN makes `/joy` visible to the Pi.
+
+**DDS discovery note**: `~/ros2_boat.sh` (wg0-only unicast) disables local multicast — two terminals on the same laptop both using `ros2_boat.sh` **cannot discover each other**, only the Pi over wg0. At home on LAN, use the default env (`source /opt/ros/humble/setup.bash && source ~/ap_ws/install/setup.bash`) for local discovery.
+
+---
+
 ## Verification (2026-08-01)
 - Pi: agent logs `session established`; `ros2 topic list` shows the full `/ap/*` set; `/ap/clock`
   live, `/ap/navsat` at 5 Hz.
