@@ -41,11 +41,14 @@ ARDUPILOT_OPTS="$TELEM1 $TELEM2 $TELEM_DDS"
 ## Laptop (`laptop/`)
 | File | Deploy to |
 |---|---|
-| `ros2_boat.sh` | `~/ros2_boat.sh` — `source` for **remote** (WireGuard) access |
-| `fastdds_wg.xml` | `~/fastdds_wg.xml` — wg0-only, unicast peer = Pi `10.0.0.5` |
+| `ros2_boat.sh` | `~/ros2_boat.sh` — `source` for boat access (local + WireGuard) |
+| `fastdds_wg.xml` | `~/fastdds_wg.xml` — additive: default transports (local multicast) + Pi `10.0.0.5` unicast peer |
 
-At **home** (same LAN) nothing is needed — the laptop's default RMW interoperates with the agent's
-Fast-DDS over LAN multicast, domain 0. `ros2_boat.sh` is for **remote/lake** over WireGuard.
+**Additive profile (no "wall").** The laptop profile keeps default transports so local
+terminal-to-terminal discovery still works, and adds the Pi as a unicast `initialPeersList` entry
+for the WireGuard leg (wg0 does not forward multicast). Mirrors the Pi's `fastdds_wg_agent.xml`.
+At **home** (same LAN) the default env also works (LAN multicast reaches the Pi); `ros2_boat.sh`
+is the one env that covers both local + wg0 — use it at the lake, or anytime.
 
 ## WireGuard IPs used
 Pi = `10.0.0.5`, laptop = `10.0.0.2`, tablet = `10.0.0.6`. Adjust the `.xml` peers if these change.

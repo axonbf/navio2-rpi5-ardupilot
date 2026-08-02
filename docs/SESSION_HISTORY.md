@@ -1113,6 +1113,20 @@ Sources: ArduPilot Battery Monitors landing page; Power Module Configuration; Ad
 
 ---
 
+### Session 21 (2026-08-02) — ROS 2 DDS laptop profile: wg0-only → additive (local multicast + wg0 unicast)
+
+- Agent: opencode (ollama glm-5.2:cloud), with user + Claude Code (Opus 4.8) review.
+- **Symptom**: at the lake the user wanted full-mesh discovery — every terminal on every machine (laptop + Pi) discoverable, no walls — over wg0. `~/ros2_boat.sh` (wg0-only, `interfaceWhiteList=10.0.0.2`, `useBuiltinTransports=false`) blocked local discovery, so two terminals both sourcing it could not see each other.
+- **Plan reviewed by Claude before applying**: Claude agreed the core change (drop the whitelist / `useBuiltinTransports=false`, keep default transports + Pi unicast peer) is correct. On the open question (multicast leak on an untrusted LAN), user said "pragmatic, don't care about hotels" → no whitelist; plain additive.
+- **First attempt (wrong)**: replaced the laptop XML with an additive profile that kept default transports and listed only the Pi `10.0.0.5` as `initialPeersList`. User tested (`ros2 run joy joy_node` in one terminal, `ros2 topic echo /joy` in the other, both sourcing `ros2_boat.sh`) → **second terminal did not see the first**.
+- **Root cause**: in Fast-DDS, `initialPeersList` **replaces** the default initial peers (which include the SPDP multicast locator `239.255.0.1`) — it does not add to them. Listing only the Pi silently removed multicast discovery, even though default transports were kept. So "additive" in the transport sense was not additive in the discovery-peer sense.
+- **Fix**: list **both** `239.255.0.1` (local multicast) and `10.0.0.5` (Pi wg0 unicast) in `initialPeersList`. Applied to `config/ros2-dds/laptop/fastdds_wg.xml` + deployed to `~/fastdds_wg.xml`. User re-tested → **works**: two terminals discover each other AND the Pi.
+- **Pi side left alone** (user request — "should work first locally"). Note for later: the Pi-side `fastdds_wg_agent.xml` likely has the **same latent bug** (it lists only the laptop `10.0.0.2`, so Pi-local terminals probably don't discover each other either; just never noticed because the agent publishes `/ap` and the laptop reaches it over the unicast peer). Fix when Pi-local multi-terminal discovery is needed.
+- **Docs synced**: `ROS2_HUMBLE_DDS_PLAN.md` (6 edits — removed "wg0-only"/"whitelists wg0 only", rewrote the "two terminals cannot discover each other" note to the corrected `initialPeersList`-replaces-defaults explanation), `TODO.md` (#11 row + Next Steps #4 marked done + #7 note), `DOCUMENTATION_INDEX.md`, `AGENTS.md`, `config/ros2-dds/README.md`.
+- **Aside**: user asked about QGC's Joystick UI vs `/ap/joy` — clarified QGC joystick is QGC's own (reads gamepad via OS, sends `RC_CHANNELS_OVERRIDE` over MAVLink UDP); `/ap/joy` is the ROS 2 DDS RC-override path (needs `joy_node` + `joy_relay.py`). Unrelated. Also: MAVROS would go on the **laptop** (where ROS 2 topics are wanted), not the Pi — and is largely redundant with native DDS.
+
+---
+
 ### Recent open topics (for the next agent / session)
 
 The user opens sessions by picking one of these. Read the linked entries before starting. (Supersedes the earlier "Recent undiscussed topics" block that used to sit before Session 19 — it was stale: it listed boat reverse and the power plan as open after Sessions 19/20 had closed/refined them.)
