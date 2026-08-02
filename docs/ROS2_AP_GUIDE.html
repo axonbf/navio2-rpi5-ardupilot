@@ -52,15 +52,16 @@ ros2 topic list ; ros2 service list
 <tr><td><code>/ap/imu/experimental/data</code></td><td class="r">R</td><td>sensor_msgs/Imu</td><td>Accel + gyro</td></tr>
 <tr><td><code>/ap/battery</code></td><td class="r">R</td><td>sensor_msgs/BatteryState</td><td>Voltage / current / %</td></tr>
 <tr><td><code>/ap/status</code></td><td class="r">R</td><td>ardupilot_msgs/Status</td><td>Armed flag, flight mode, flags (see armability note)</td></tr>
-<tr><td><code>/ap/rc</code></td><td class="r">R</td><td>(check <code>ros2 topic type</code>)</td><td>RC channel inputs</td></tr>
-<tr><td><code>/ap/joy</code></td><td class="r">R</td><td>sensor_msgs/Joy</td><td>RC as a joystick msg</td></tr>
-<tr><td><code>/ap/airspeed</code></td><td class="r">R</td><td>(check <code>ros2 topic type</code>)</td><td>Airspeed (if sensor present)</td></tr>
-<tr><td><code>/ap/tf</code> · <code>/ap/tf_static</code></td><td class="r">R</td><td>tf2_msgs/TFMessage</td><td>Coordinate frames (for tf2 / nav2)</td></tr>
+<tr><td><code>/ap/rc</code></td><td class="r">R</td><td>ardupilot_msgs/Rc</td><td>RC channel inputs (telemetry)</td></tr>
+<tr><td><code>/ap/airspeed</code></td><td class="r">R</td><td>ardupilot_msgs/Airspeed</td><td>Airspeed (if sensor present)</td></tr>
+<tr><td><code>/ap/tf_static</code></td><td class="r">R</td><td>tf2_msgs/TFMessage</td><td>Static coordinate frames (for tf2 / nav2)</td></tr>
+<tr><td><code>/ap/tf</code></td><td class="w">W</td><td>tf2_msgs/TFMessage</td><td><strong>External odometry/transforms</strong> — you publish (visual odom, etc.)</td></tr>
 <tr><td><code>/ap/clock</code></td><td class="r">R</td><td>rosgraph_msgs/Clock</td><td>Time source</td></tr>
 <tr><td><code>/ap/time</code></td><td class="r">R</td><td>builtin_interfaces/Time</td><td>Vehicle time</td></tr>
 <tr><td><code>/ap/cmd_vel</code></td><td class="w">W</td><td>geometry_msgs/TwistStamped</td><td><strong>Velocity/steering command</strong> — the main autonomy input (GUIDED mode)</td></tr>
-<tr><td><code>/ap/cmd_gps_pose</code></td><td class="w">W</td><td>ardupilot_msgs/GlobalPosition</td><td>Command a global position/attitude</td></tr>
-<tr><td><code>/ap/goal_lla</code></td><td class="w">W</td><td>geographic_msgs/GeoPointStamped</td><td>"Go to this lat/lon/alt" goal</td></tr>
+<tr><td><code>/ap/cmd_gps_pose</code></td><td class="w">W</td><td>ardupilot_msgs/GlobalPosition</td><td>Command a global position/attitude (GUIDED)</td></tr>
+<tr><td><code>/ap/goal_lla</code></td><td class="r">R</td><td>geographic_msgs/GeoPointStamped</td><td>Current target waypoint — ArduPilot <em>publishes</em> the active goal (not a command input)</td></tr>
+<tr><td><code>/ap/joy</code></td><td class="w">W</td><td>sensor_msgs/Joy</td><td><strong>RC channel override</strong> — you publish axes (−1..+1) to override up to 8 RC channels (see note below). Works in <em>any</em> mode, not just GUIDED</td></tr>
 </table>
 
 <h2>Services</h2>
@@ -129,6 +130,27 @@ failsafe, EKF healthy, battery OK …).
 <div class="note">
 <strong>Safety.</strong> Arming makes the boat <em>live</em>. On the bench with the ESC/motors powered,
 <code>arm</code> + a mode can spin the props. Keep it disarmed / props clear until you mean it.
+</div>
+
+<div class="note">
+<strong><code>/ap/joy</code> — RC override (command any channel, any mode).</strong>
+<code>/ap/joy</code> is ArduPilot's <em>input</em> (it subscribes), not telemetry — it overrides up to
+8 RC channels at the RC-input layer, the same mechanism as MAVLink <code>RC_CHANNELS_OVERRIDE</code>.
+<ul>
+<li><code>axes[i]</code> range <strong>−1.0 to +1.0</strong> → linearly mapped to channel <code>i</code>'s
+<code>RCx_MIN</code>–<code>RCx_MAX</code> PWM. Requires <code>axes_size &gt;= 4</code>.</li>
+<li><code>axes[i] = NaN</code> → <strong>releases</strong> channel <code>i</code> back to the physical RC.</li>
+<li><strong>Auto-release after 1 s</strong> of no <code>/ap/joy</code> messages → you must publish continuously
+to hold an override.</li>
+<li>Works in <strong>any mode</strong> (MANUAL, ACRO, STEERING, GUIDED…), so it's the direct
+"drive the boat from ROS 2" path — for a skid-steer boat publish throttle (ch3) + yaw (ch4).
+There is <strong>no raw <code>/ap/servo</code> topic</strong> — <code>/ap/joy</code> is the closest thing to per-motor control.</li>
+</ul>
+<pre>
+ros2 topic pub /ap/joy sensor_msgs/msg/Joy "{axes: [0.0, 0.0, 0.0, 0.0]}" -r 10   # neutral, hold
+# Skid-steer: axes[2]=throttle (-1 rev .. +1 fwd), axes[3]=yaw (-1 right .. +1 left)
+ros2 topic pub /ap/joy sensor_msgs/msg/Joy "{axes: [0.0, 0.0, 0.5, 0.0]}" -r 10   # half fwd
+</pre>
 </div>
 
 </body>

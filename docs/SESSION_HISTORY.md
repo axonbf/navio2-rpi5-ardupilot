@@ -1068,16 +1068,6 @@ This is the cheapest decisive test. No rebuild, no param change.
 - **Open**: confirm the analog PM still measures correctly when it is no longer the primary current path (it may need to remain in series with the load to read current). Pending hardware test.
 - **Hailo HAT removed from boat in the meantime** (see AGENTS.md "Current Phase") — power budget solved at the source for the current boat configuration. Pi 5 + Navio2 + sensors only needs ~2 A, so the existing 3 A analog PM is sufficient for the current boat. The Pololu/Matek split-supply solution is for when the Hailo HAT is re-installed.
 
----
-
-### Recent undiscussed topics (for the next agent / session)
-
-The user opens sessions by picking one of these. Read the linked entries before starting:
-
-- **Power module + Hailo HAT power budget** — Session 18 (this file). Resolution: Pololu/Matek BEC as supply + original analog PM as measurement only; Hailo HAT currently removed. Open: verify analog PM still measures when not the primary current path.
-- **Boat reverse regression (ArduPilot 4.8)** — Session 17 (this file). Open. Cheapest decisive test: read `/sys/class/pwm/pwmchip*/pwm*/duty_cycle` stick-centered vs. stick-full-back. Reference parm files: `docs/Pi3/Pi3_mavproxy_ResearchCat.parm` (4.0.0, works), `docs/Pi5/Pi5_mavproxy_ResearchCat.parm` (4.8.0-dev, broken).
-- **Other open TODOs** — see `docs/TODO.md` Pending table (#20 corporate email scrub, #21 pwmchip unwind, #23 serial2 device path, #24 telemetry port verify).
-
 ### Session 19 (2026-07-19) — Boat reverse ROOT-CAUSED & FIXED (RCIO PWM refresh bug)
 
 - Agent: Claude Code (Opus 4.8), with the user driving hardware tests
@@ -1120,3 +1110,14 @@ Sources: ArduPilot Battery Monitors landing page; Power Module Configuration; Ad
 - **Motors identified**: 2× Roxxy 3536/06 (~550 W, 50 A max each, 3S) → **~100 A peak total**. That rules out the Holybro PM02D (30 A continuous wiring) and any 10 A INA breakout for measurement. Corrected measurement pick: **Mauch HS-200 hall-effect** (analog → Navio2 analog port) or **INA228 + 100–200 A external shunt** (I2C). Sensor on main battery + = total draw.
 - **Supply sizing**: board budget ~6–8 A peak at 5 V (Pi 5 ~2.5–3 A + Hailo ~0.5–1 A + NVMe M.2 SSD ~0.5–1.5 A + Navio2 ~0.3 A) → size to **≥8–10 A continuous (~50 W)**; 6 A is marginal. Use a **wide-input buck (8–36 V → 5 V)** — a buck takes an input range, so a varying LiPo needs no stable input; prefer fixed 5 V out (no trimpot drift).
 - **PM02D BEC = 3 A** confirmed measurement-class only (can't power the stack).
+
+---
+
+### Recent open topics (for the next agent / session)
+
+The user opens sessions by picking one of these. Read the linked entries before starting. (Supersedes the earlier "Recent undiscussed topics" block that used to sit before Session 19 — it was stale: it listed boat reverse and the power plan as open after Sessions 19/20 had closed/refined them.)
+
+- **Boat reverse** — Session 17 (open) → Session 19 (**CLOSED**: RCIO PWM-refresh bug, fixed `ba1d62a` + rcio-dkms PR #12 `f3a4887`). Reverse works. Follow-up open: TODO #26 host-heartbeat for RCIO PWM.
+- **Power module + Hailo HAT power budget** — Session 18 (investigation) → Session 20 (plan finalized: Pololu/Matek buck for supply + Mauch HS-200 / INA228+shunt for measurement). DC/DC supply bought 2026-07-19; measurement sensor TBD. Only needed once Hailo HAT is re-installed (currently removed → 3 A analog PM suffices). Open: TODO #25 (validate on HW when parts arrive).
+- **ROS 2 / native DDS** — TODO #11 **DONE 2026-08-01** (Humble + serial-PTY XRCE; see `ROS2_HUMBLE_DDS_PLAN.md`). Working + reboot-verified.
+- **Other open TODOs** — see `docs/TODO.md` Pending table: #12 (Hailo-8L + ROS2 inference), #13 (Navigator eval), #20 (corporate email scrub), #21 (pwmchip unwind), #25 (power HW validation), #26 (RCIO host-heartbeat), #28 (RPM measurement path), #29 (DKMS for RCIO — do before routine `apt upgrade`).
